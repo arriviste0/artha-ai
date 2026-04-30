@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ArthaAI — Personal Finance SaaS
 
-## Getting Started
+AI-powered personal finance management for the Indian market. Supports salaried, freelance, and business-owner income modes.
 
-First, run the development server:
+## Quick start (< 10 minutes)
 
+### Prerequisites
+- Node.js 20 LTS
+- pnpm (`npm install -g pnpm`)
+- MongoDB Atlas cluster (free tier works)
+- Google Cloud project with OAuth 2.0 credentials
+- Google AI Studio API key (for Gemini, only needed for Phase 3+)
+
+### 1. Install
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment variables
+```bash
+cp .env.example .env.local
+```
+Fill in at minimum:
+- `MONGODB_URI` — your Atlas connection string
+- `NEXTAUTH_SECRET` — run `openssl rand -base64 32`
+- `NEXTAUTH_URL=http://localhost:3000`
+- `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` (skip if only using email/password auth)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Run
+```bash
+pnpm dev
+```
+Open http://localhost:3000. Sign up → complete 4-step onboarding → you're in.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Tech stack
 
-To learn more about Next.js, take a look at the following resources:
+| Layer | Choice |
+|-------|--------|
+| Framework | Next.js 16, App Router, TypeScript strict |
+| Database | MongoDB Atlas via Mongoose |
+| Auth | NextAuth v5 (email + Google OAuth), JWT sessions |
+| UI | Tailwind CSS v4 + shadcn/ui (new-york style) |
+| Charts | Recharts |
+| Forms | react-hook-form + zod |
+| State | TanStack Query (server state) |
+| AI | Google Gemini (primary) · Ollama (local fallback) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Money conventions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+All monetary values are stored as **integer paise** (₹1 = 100 paise). No floats touch the database. Use `lib/money.ts` for all conversions and formatting.
 
-## Deploy on Vercel
+## Project structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+app/
+  (auth)/login, signup    — public auth pages
+  (app)/...               — protected app pages (layout checks session)
+  onboarding/             — 4-step wizard
+  api/                    — route handlers, all behind withAuth
+components/
+  ui/                     — shadcn primitives
+  layout/                 — sidebar, header, mobile nav
+  onboarding/             — wizard step components
+lib/
+  db.ts                   — mongoose singleton with pooling
+  auth.ts                 — NextAuth config
+  with-auth.ts            — API route wrapper (injects userId)
+  money.ts                — paise ↔ rupees, formatINR
+  finance.ts              — XIRR, CAGR, savings rate, emergency runway
+  validators/             — zod schemas (shared client + server)
+models/                   — mongoose schemas
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Build phases
+
+| Phase | Status | What it adds |
+|-------|--------|-------------|
+| 1 | ✅ Done | Auth, onboarding, app shell, empty states |
+| 2 | Planned | Manual accounts + transactions, dashboard widgets |
+| 3 | Planned | Statement upload + AI parsing (PDF/CSV) |
+| 4 | Planned | Budgets, goals, emergency fund wizard |
+| 5 | Planned | Investment tracking + XIRR/CAGR |
+| 6 | Planned | AI Financial Planner + conversational chat |
+| 7 | Planned | Bank integration (Mock + Setu Account Aggregator) |
+| 8 | Planned | Export, account deletion, Lighthouse ≥ 90 |
+
+## Running tests
+```bash
+pnpm test          # unit tests (vitest)
+pnpm test:e2e      # end-to-end (playwright)
+```
+
+## Disclaimer
+
+ArthaAI is an educational tool. It is **not** SEBI-registered investment advice.
