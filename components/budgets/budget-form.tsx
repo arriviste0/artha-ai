@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import { createBudgetSchema, type CreateBudgetInput, type CreateBudgetFormValues } from "@/lib/validators/budget"
+import type { BudgetDTO } from "@/hooks/use-budgets"
 
 const CATEGORIES = [
   "Food & Dining", "Rent / Housing", "Transport", "Utilities", "Healthcare",
@@ -20,9 +21,11 @@ const CATEGORIES = [
 interface Props {
   onSubmit: (data: CreateBudgetInput) => Promise<void>
   onCancel: () => void
+  defaultValues?: BudgetDTO
+  submitLabel?: string
 }
 
-export function BudgetForm({ onSubmit, onCancel }: Props) {
+export function BudgetForm({ onSubmit, onCancel, defaultValues, submitLabel = "Create budget" }: Props) {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
@@ -36,12 +39,12 @@ export function BudgetForm({ onSubmit, onCancel }: Props) {
   } = useForm<CreateBudgetFormValues>({
     resolver: zodResolver(createBudgetSchema),
     defaultValues: {
-      period: "monthly",
-      category: "Food & Dining",
-      rollover: false,
-      startDate: monthStart,
-      limitPaise: 0,
-      name: "",
+      period: defaultValues?.period ?? "monthly",
+      category: defaultValues?.category ?? "Food & Dining",
+      rollover: defaultValues?.rollover ?? false,
+      startDate: defaultValues?.startDate ? new Date(defaultValues.startDate).toISOString() : monthStart,
+      limitPaise: defaultValues?.limitPaise ?? 0,
+      name: defaultValues?.name ?? "",
     },
   })
 
@@ -94,6 +97,9 @@ export function BudgetForm({ onSubmit, onCancel }: Props) {
 
       <div className="space-y-1.5">
         <Label>Spending limit (₹)</Label>
+        <p className="text-xs text-muted-foreground">
+          This is the maximum amount you plan to spend in this budget&apos;s period.
+        </p>
         <Input
           type="number"
           step="100"
@@ -115,7 +121,7 @@ export function BudgetForm({ onSubmit, onCancel }: Props) {
         </Button>
         <Button type="submit" className="flex-1" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Create budget
+          {submitLabel}
         </Button>
       </div>
     </form>
