@@ -31,7 +31,7 @@ export function MobileNav() {
           <span className="sr-only">Open menu</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-60 p-0">
+      <SheetContent side="left" showCloseButton={false} className="w-60 p-0">
         <div className="p-4 border-b flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2" onClick={() => setOpen(false)}>
             <span className="text-xl font-bold text-primary">₹</span>
