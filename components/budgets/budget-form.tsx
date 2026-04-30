@@ -102,7 +102,7 @@ export function BudgetForm({ onSubmit, onCancel, defaultValues, submitLabel = "C
         </p>
         <Input
           type="number"
-          step="100"
+          step="1"
           min="1"
           placeholder="e.g. 10000"
           value={limitRupees || ""}
