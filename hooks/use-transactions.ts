@@ -102,6 +102,8 @@ export function useUpdateTransaction() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["accounts"] })
+      qc.invalidateQueries({ queryKey: ["dashboard"] })
       qc.invalidateQueries({ queryKey: ["budgets"] })
     },
   })

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { createTransactionSchema, type CreateTransactionInput, type CreateTransactionFormValues } from "@/lib/validators/transaction"
 import type { AccountDTO } from "@/hooks/use-accounts"
+import type { TransactionDTO } from "@/hooks/use-transactions"
 
 const CATEGORIES = [
   "Food & Dining",
@@ -41,9 +42,18 @@ interface Props {
   onSubmit: (data: CreateTransactionInput) => Promise<void>
   onCancel: () => void
   defaultAccountId?: string
+  defaultValues?: TransactionDTO
+  submitLabel?: string
 }
 
-export function TransactionForm({ accounts, onSubmit, onCancel, defaultAccountId }: Props) {
+export function TransactionForm({
+  accounts,
+  onSubmit,
+  onCancel,
+  defaultAccountId,
+  defaultValues,
+  submitLabel = "Add transaction",
+}: Props) {
   const {
     register,
     handleSubmit,
@@ -54,12 +64,14 @@ export function TransactionForm({ accounts, onSubmit, onCancel, defaultAccountId
   } = useForm<CreateTransactionFormValues>({
     resolver: zodResolver(createTransactionSchema),
     defaultValues: {
-      accountId: defaultAccountId ?? accounts[0]?._id ?? "",
-      type: "debit",
-      occurredAt: new Date().toISOString().split("T")[0] + "T00:00:00.000Z",
-      category: "Other",
-      tags: [],
-      amountPaise: 0,
+      accountId: defaultValues?.accountId ?? defaultAccountId ?? accounts[0]?._id ?? "",
+      type: defaultValues?.type ?? "debit",
+      occurredAt: defaultValues?.occurredAt ?? new Date().toISOString().split("T")[0] + "T00:00:00.000Z",
+      category: defaultValues?.category ?? "Other",
+      tags: defaultValues?.tags ?? [],
+      amountPaise: defaultValues?.amountPaise ?? 0,
+      description: defaultValues?.description ?? "",
+      merchant: defaultValues?.merchant ?? "",
     },
   })
 
@@ -162,7 +174,7 @@ export function TransactionForm({ accounts, onSubmit, onCancel, defaultAccountId
           <Label>Date</Label>
           <Input
             type="date"
-            defaultValue={new Date().toISOString().split("T")[0]}
+            defaultValue={(defaultValues?.occurredAt ?? new Date().toISOString()).split("T")[0]}
             onChange={(e) =>
               setValue("occurredAt", e.target.value ? e.target.value + "T00:00:00.000Z" : "")
             }
@@ -176,7 +188,7 @@ export function TransactionForm({ accounts, onSubmit, onCancel, defaultAccountId
         </Button>
         <Button type="submit" className="flex-1" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Add transaction
+          {submitLabel}
         </Button>
       </div>
     </form>

@@ -1,14 +1,24 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react"
+import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatINR } from "@/lib/money"
-import { useDeleteTransaction, type TransactionDTO } from "@/hooks/use-transactions"
+import { useAccounts } from "@/hooks/use-accounts"
+import { useDeleteTransaction, useUpdateTransaction, type TransactionDTO } from "@/hooks/use-transactions"
+import { TransactionForm } from "./transaction-form"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import type { CreateTransactionInput } from "@/lib/validators/transaction"
 
 interface Props {
   transactions: TransactionDTO[]
@@ -21,7 +31,10 @@ interface Props {
 
 export function TransactionTable({ transactions, total, page, limit, isLoading, onPageChange }: Props) {
   const del = useDeleteTransaction()
+  const update = useUpdateTransaction()
+  const { data: accounts = [] } = useAccounts()
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingTxn, setEditingTxn] = useState<TransactionDTO | null>(null)
   const totalPages = Math.ceil(total / limit)
 
   async function handleDelete(id: string) {
@@ -33,6 +46,18 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
       toast.error("Failed to delete transaction")
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function handleUpdate(data: CreateTransactionInput) {
+    if (!editingTxn) return
+
+    try {
+      await update.mutateAsync({ id: editingTxn._id, data: { ...data, needsReview: false } })
+      setEditingTxn(null)
+      toast.success("Transaction updated")
+    } catch {
+      toast.error("Failed to update transaction")
     }
   }
 
@@ -123,15 +148,27 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                     {isCredit ? "+" : "−"}{formatINR(txn.amountPaise)}
                   </td>
                   <td className="px-2 py-3">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDelete(txn._id)}
-                      disabled={deletingId === txn._id}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => setEditingTxn(txn)}
+                        title="Edit transaction"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDelete(txn._id)}
+                        disabled={deletingId === txn._id}
+                        title="Delete transaction"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -164,6 +201,26 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
           </div>
         </div>
       )}
+
+      <Dialog open={!!editingTxn} onOpenChange={(open) => !open && setEditingTxn(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit transaction</DialogTitle>
+            <DialogDescription>
+              Update the account, date, amount, category, and description for this transaction.
+            </DialogDescription>
+          </DialogHeader>
+          {editingTxn && (
+            <TransactionForm
+              accounts={accounts}
+              defaultValues={editingTxn}
+              onSubmit={handleUpdate}
+              onCancel={() => setEditingTxn(null)}
+              submitLabel="Save changes"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

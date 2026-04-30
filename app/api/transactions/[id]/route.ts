@@ -24,15 +24,29 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
   const before = await Transaction.findOne({ _id: params?.id, userId })
   if (!before) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // If amount or type changed, reverse + reapply balance delta
-  if (
-    (parsed.data.amountPaise !== undefined && parsed.data.amountPaise !== before.amountPaise) ||
-    (parsed.data.type !== undefined && parsed.data.type !== before.type)
-  ) {
-    const oldDelta = before.type === "credit" ? before.amountPaise : -before.amountPaise
-    const newAmount = parsed.data.amountPaise ?? before.amountPaise
-    const newType = parsed.data.type ?? before.type
-    const newDelta = newType === "credit" ? newAmount : -newAmount
+  const oldAccountId = before.accountId.toString()
+  const newAccountId = parsed.data.accountId ?? oldAccountId
+
+  if (newAccountId !== oldAccountId) {
+    const accountExists = await Account.exists({ _id: newAccountId, userId })
+    if (!accountExists) return NextResponse.json({ error: "Account not found" }, { status: 404 })
+  }
+
+  const oldDelta = before.type === "credit" ? before.amountPaise : -before.amountPaise
+  const newAmount = parsed.data.amountPaise ?? before.amountPaise
+  const newType = parsed.data.type ?? before.type
+  const newDelta = newType === "credit" ? newAmount : -newAmount
+
+  if (newAccountId !== oldAccountId) {
+    await Promise.all([
+      Account.findByIdAndUpdate(before.accountId, {
+        $inc: { currentBalancePaise: -oldDelta },
+      }),
+      Account.findByIdAndUpdate(newAccountId, {
+        $inc: { currentBalancePaise: newDelta },
+      }),
+    ])
+  } else if (newDelta !== oldDelta) {
     await Account.findByIdAndUpdate(before.accountId, {
       $inc: { currentBalancePaise: newDelta - oldDelta },
     })
