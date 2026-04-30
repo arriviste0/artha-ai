@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil } from "lucide-react"
+import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { CreateTransactionInput } from "@/lib/validators/transaction"
@@ -89,7 +95,7 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Description</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Category</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Amount</th>
-              <th className="w-10" />
+              <th className="w-12 sm:w-20" />
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -142,17 +148,17 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                     </Badge>
                   </td>
                   <td className={cn(
-                    "px-4 py-3 text-right font-medium tabular-nums",
+                    "px-2 py-3 text-right font-medium tabular-nums whitespace-nowrap sm:px-4",
                     isCredit ? "text-green-600 dark:text-green-400" : ""
                   )}>
                     {isCredit ? "+" : "−"}{formatINR(txn.amountPaise)}
                   </td>
-                  <td className="px-2 py-3">
-                    <div className="flex items-center gap-1">
+                  <td className="px-1 py-3 sm:px-2">
+                    <div className="hidden items-center justify-end gap-1 sm:flex">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
                         onClick={() => setEditingTxn(txn)}
                         title="Edit transaction"
                       >
@@ -161,13 +167,41 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={() => handleDelete(txn._id)}
                         disabled={deletingId === txn._id}
                         title="Delete transaction"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
+                    </div>
+                    <div className="flex justify-end sm:hidden">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 text-muted-foreground"
+                            aria-label="Transaction actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-36">
+                          <DropdownMenuItem onSelect={() => setEditingTxn(txn)}>
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={deletingId === txn._id}
+                            onSelect={() => handleDelete(txn._id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 </tr>
