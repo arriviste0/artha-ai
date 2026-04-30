@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { aiGenerate } from "@/lib/ai/provider"
+import { aiGenerate, type AIProviderName } from "@/lib/ai/provider"
 
 export const budgetSuggestionSchema = z.object({
   message: z.string(),
@@ -37,7 +37,8 @@ export async function getBudgetAdvice(
   userMessage: string,
   budgets: BudgetContext[],
   monthlyIncomePaise: number,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  provider?: AIProviderName
 ): Promise<BudgetSuggestion> {
   const budgetSummary = budgets
     .map(
@@ -87,7 +88,7 @@ Respond ONLY with valid JSON matching this exact schema:
 Only include categories where you suggest a change. If no budget changes are needed, return an empty suggestions array and explain why in the message.`
 
   try {
-    const raw = await aiGenerate({ prompt: systemPrompt, json: true })
+    const raw = await aiGenerate({ prompt: systemPrompt, json: true, provider })
     const parsed = budgetSuggestionSchema.safeParse(JSON.parse(raw))
     if (parsed.success) return parsed.data
   } catch {
@@ -96,7 +97,7 @@ Only include categories where you suggest a change. If no budget changes are nee
 
   // Retry with explicit reminder on parse failure
   const retryPrompt = `${systemPrompt}\n\nIMPORTANT: Your previous response could not be parsed as JSON. Respond ONLY with the JSON object, no markdown, no explanation outside the JSON.`
-  const retryRaw = await aiGenerate({ prompt: retryPrompt, json: true })
+  const retryRaw = await aiGenerate({ prompt: retryPrompt, json: true, provider })
   const retryParsed = budgetSuggestionSchema.safeParse(JSON.parse(retryRaw))
   if (retryParsed.success) return retryParsed.data
 

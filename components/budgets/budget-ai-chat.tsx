@@ -38,6 +38,8 @@ interface ChatMessage {
   applied?: boolean
 }
 
+type AIProvider = "gemini" | "ollama"
+
 const QUICK_PROMPTS = [
   "I'll spend ₹3000 more on dining this month — help me adjust",
   "I want to save more. Where can I cut back?",
@@ -55,6 +57,7 @@ export function BudgetAIChat() {
   ])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [provider, setProvider] = useState<AIProvider>("gemini")
   const scrollRef = useRef<HTMLDivElement>(null)
   const updateBudget = useUpdateBudget()
 
@@ -81,7 +84,7 @@ export function BudgetAIChat() {
       const res = await fetch("/api/budgets/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, history }),
+        body: JSON.stringify({ message: msg, history, provider }),
       })
 
       if (!res.ok) {
@@ -108,10 +111,7 @@ export function BudgetAIChat() {
         ...prev,
         {
           role: "assistant",
-          content:
-            err instanceof Error && err.message.includes("AI_DEFAULT_PROVIDER")
-              ? "AI features need a valid AI provider configured in your environment."
-              : "Sorry, I couldn't process that right now. Please try again.",
+          content: err instanceof Error ? err.message : "Sorry, I couldn't process that right now. Please try again.",
         },
       ])
     } finally {
@@ -149,6 +149,34 @@ export function BudgetAIChat() {
         <p className="text-xs text-muted-foreground">
           Tell me how your spending plans are changing — I&apos;ll rebalance your budgets.
         </p>
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-xs text-muted-foreground">AI</span>
+          <div className="flex rounded-md border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              className={cn(
+                "h-7 rounded px-2.5 text-xs transition-colors",
+                provider === "gemini" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setProvider("gemini")}
+              disabled={isLoading}
+            >
+              Gemini
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "h-7 rounded px-2.5 text-xs transition-colors",
+                provider === "ollama" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setProvider("ollama")}
+              disabled={isLoading}
+              title="Uses OLLAMA_MODEL, default qwen2.5-coder:7b"
+            >
+              Local Ollama
+            </button>
+          </div>
+        </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">

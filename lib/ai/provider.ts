@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 interface GenerateOpts {
   prompt: string
   json: boolean
+  provider?: AIProviderName
 }
 
 export type AIProviderName = "gemini" | "ollama"
@@ -34,6 +35,11 @@ export function getAIAvailability() {
       provider === "gemini" ? !!process.env.GEMINI_API_KEY : true
     ),
   }
+}
+
+export function isAIProviderAvailable(provider: AIProviderName): boolean {
+  if (provider === "gemini") return !!process.env.GEMINI_API_KEY
+  return true
 }
 
 async function geminiGenerate({ prompt, json }: GenerateOpts): Promise<string> {
@@ -69,7 +75,7 @@ async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
 // Tries each provider in AI_DEFAULT_PROVIDER order, falling back on error.
 // Format: "gemini" | "ollama" | "gemini,ollama" | "ollama,gemini"
 export async function aiGenerate(opts: GenerateOpts): Promise<string> {
-  const chain = getAIProviderChain()
+  const chain = opts.provider ? [opts.provider] : getAIProviderChain()
 
   let lastError: Error | undefined
   for (const name of chain) {
