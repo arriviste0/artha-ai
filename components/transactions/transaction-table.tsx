@@ -87,12 +87,12 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="min-w-[520px] w-full text-sm sm:min-w-0">
           <thead className="bg-muted/50 border-b">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Date</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Description</th>
+              <th className="hidden text-left px-4 py-3 font-medium text-muted-foreground sm:table-cell">Description</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Category</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Amount</th>
               <th className="w-12 sm:w-20" />
@@ -116,7 +116,7 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                     </span>
                     <span className="sm:hidden">{date.getDate()}/{date.getMonth() + 1}</span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-4 py-3 sm:table-cell">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className={cn(
                         "h-6 w-6 rounded-full flex items-center justify-center flex-shrink-0",
