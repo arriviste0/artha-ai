@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu, X, LayoutDashboard, ArrowLeftRight, Wallet, PiggyBank, Target, TrendingUp, Sparkles, Settings } from "lucide-react"
+import { Menu, X, LayoutDashboard, ArrowLeftRight, Wallet, PiggyBank, Target, TrendingUp, Sparkles, Settings, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/transactions", icon: ArrowLeftRight, label: "Transactions" },
   { href: "/accounts", icon: Wallet, label: "Accounts" },
+  { href: "/statements", icon: FileText, label: "Statements" },
   { href: "/budgets", icon: PiggyBank, label: "Budgets" },
   { href: "/goals", icon: Target, label: "Goals" },
   { href: "/investments", icon: TrendingUp, label: "Investments" },

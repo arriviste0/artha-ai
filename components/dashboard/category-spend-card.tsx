@@ -73,7 +73,7 @@ export function CategorySpendCard() {
                 ))}
               </Pie>
               <Tooltip
-                formatter={(v) => [`Rs ${Number(v).toLocaleString("en-IN")}`, ""]}
+                formatter={(v) => [`₹${Number(v).toLocaleString("en-IN")}`, ""]}
                 contentStyle={{ fontSize: 11 }}
               />
             </PieChart>

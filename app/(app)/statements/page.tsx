@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { EmptyState } from "@/components/ui/empty-state"
 import { UploadDropzone } from "@/components/statements/upload-dropzone"
 import { useDeleteStatement, useStatements } from "@/hooks/use-statements"
 import { useAccounts } from "@/hooks/use-accounts"
@@ -83,15 +84,12 @@ export default function StatementsPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : !statements?.length ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="font-medium">No statements uploaded</h3>
-            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              Upload your bank statement PDF or CSV and let AI categorize your transactions automatically.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={FileText}
+          title="No statements uploaded"
+          description="Upload your bank statement PDF or CSV and let AI categorize your transactions automatically."
+          action={{ label: "Upload statement", onClick: () => setOpen(true) }}
+        />
       ) : (
         <div className="space-y-3">
           {statements.map((stmt) => {

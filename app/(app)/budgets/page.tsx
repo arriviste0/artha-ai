@@ -44,7 +44,7 @@ export default function BudgetsPage() {
       </div>
 
       {budgets.length > 0 && (
-        <div className="grid grid-cols-3 gap-4 rounded-xl border bg-muted/30 p-4">
+        <div className="grid grid-cols-1 gap-4 rounded-xl border bg-muted/30 p-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">Total budgeted</p>
             <p className="text-lg font-bold tabular-nums">{formatINR(totalLimit)}</p>

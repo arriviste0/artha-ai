@@ -47,11 +47,30 @@ async function geminiGenerate({ prompt, json }: GenerateOpts): Promise<string> {
   if (!key) throw new Error("GEMINI_API_KEY not set")
   const genAI = new GoogleGenerativeAI(key)
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_CHAT_MODEL ?? "gemini-2.0-flash",
+    model: process.env.GEMINI_CHAT_MODEL ?? "gemini-1.5-flash",
     generationConfig: json ? { responseMimeType: "application/json" } : undefined,
   })
-  const result = await model.generateContent(prompt)
-  return result.response.text()
+
+  const attempt = () => model.generateContent(prompt).then((r) => r.response.text())
+
+  try {
+    return await attempt()
+  } catch (err) {
+    const msg = (err as Error).message ?? ""
+    if (msg.includes("429")) {
+      // Retry once after the server-suggested delay for per-minute rate limits (≤30s)
+      const match = msg.match(/retry.*?(\d+(?:\.\d+)?)s/i)
+      const delaySec = match ? parseFloat(match[1]) : 0
+      if (delaySec > 0 && delaySec <= 30) {
+        await new Promise((r) => setTimeout(r, delaySec * 1000))
+        return await attempt()
+      }
+      throw new Error(
+        "Gemini free-tier quota exhausted. Generate a new key at aistudio.google.com/app/apikey or enable billing at console.cloud.google.com."
+      )
+    }
+    throw err
+  }
 }
 
 async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
