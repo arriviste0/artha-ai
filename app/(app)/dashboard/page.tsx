@@ -9,6 +9,7 @@ import { NetWorthCard } from "@/components/dashboard/net-worth-card"
 import { CashflowCard } from "@/components/dashboard/cashflow-card"
 import { CategorySpendCard } from "@/components/dashboard/category-spend-card"
 import { AccountsOverviewCard } from "@/components/dashboard/accounts-overview-card"
+import { GoalsSummaryCard } from "@/components/dashboard/goals-summary-card"
 import { useDashboard } from "@/hooks/use-dashboard"
 import { cn } from "@/lib/utils"
 
@@ -65,6 +66,7 @@ export default function DashboardPage() {
               <CategorySpendCard />
               <AccountsOverviewCard />
             </div>
+            <GoalsSummaryCard />
           </TabsContent>
 
           <TabsContent value="spending" className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
