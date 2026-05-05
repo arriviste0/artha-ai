@@ -12,7 +12,10 @@ export const createGoalSchema = z.object({
 
 export const updateGoalSchema = createGoalSchema
   .partial()
-  .extend({ status: z.enum(["active", "paused", "achieved", "abandoned"]).optional() })
+  .extend({
+    currentPaise: z.number().int("Must be integer paise").min(0).optional(),
+    status: z.enum(["active", "paused", "achieved", "abandoned"]).optional(),
+  })
 
 export type CreateGoalInput = z.infer<typeof createGoalSchema>
 export type UpdateGoalInput = z.infer<typeof updateGoalSchema>
