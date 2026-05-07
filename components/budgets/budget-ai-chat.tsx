@@ -36,6 +36,7 @@ interface ChatMessage {
   analysis?: string
   totalImpactRupees?: number
   applied?: boolean
+  undone?: boolean
 }
 
 const QUICK_PROMPTS = [
@@ -137,16 +138,35 @@ export function BudgetAIChat() {
         suggestions.map((s) =>
           updateBudget.mutateAsync({
             id: s.budgetId,
-            data: { limitPaise: s.suggestedLimitPaise },
+            data: { limitPaise: Math.round(s.suggestedLimitPaise) },
           })
         )
       )
       setMessages((prev) =>
-        prev.map((m, i) => (i === msgIndex ? { ...m, applied: true } : m))
+        prev.map((m, i) => (i === msgIndex ? { ...m, applied: true, undone: false } : m))
       )
       toast.success(`Applied ${suggestions.length} budget adjustment${suggestions.length > 1 ? "s" : ""}`)
     } catch {
       toast.error("Failed to apply some budget changes")
+    }
+  }
+
+  async function undoChanges(msgIndex: number, suggestions: Suggestion[]) {
+    try {
+      await Promise.all(
+        suggestions.map((s) =>
+          updateBudget.mutateAsync({
+            id: s.budgetId,
+            data: { limitPaise: Math.round(s.currentLimitPaise) },
+          })
+        )
+      )
+      setMessages((prev) =>
+        prev.map((m, i) => (i === msgIndex ? { ...m, applied: false, undone: true } : m))
+      )
+      toast.success("Budget changes undone")
+    } catch {
+      toast.error("Failed to undo changes")
     }
   }
 
@@ -293,7 +313,7 @@ export function BudgetAIChat() {
                       ))}
                     </div>
 
-                    {!msg.applied ? (
+                    {!msg.applied && !msg.undone ? (
                       <div className="px-3.5 py-2.5 bg-muted/20 border-t">
                         <Button
                           size="sm"
@@ -309,10 +329,34 @@ export function BudgetAIChat() {
                           Apply {msg.suggestions.length} change{msg.suggestions.length > 1 ? "s" : ""}
                         </Button>
                       </div>
+                    ) : msg.applied ? (
+                      <div className="px-3.5 py-2.5 bg-green-50 dark:bg-green-950/20 border-t flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">Changes applied</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => undoChanges(i, msg.suggestions!)}
+                          disabled={updateBudget.isPending}
+                        >
+                          {updateBudget.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Undo"}
+                        </Button>
+                      </div>
                     ) : (
-                      <div className="px-3.5 py-2.5 bg-green-50 dark:bg-green-950/20 border-t flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        <span className="text-xs font-medium text-green-700 dark:text-green-400">Changes applied</span>
+                      <div className="px-3.5 py-2.5 bg-muted/20 border-t flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">Changes undone</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => applyChanges(i, msg.suggestions!)}
+                          disabled={updateBudget.isPending}
+                        >
+                          {updateBudget.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Re-apply"}
+                        </Button>
                       </div>
                     )}
                   </div>

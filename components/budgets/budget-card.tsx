@@ -53,9 +53,25 @@ export function BudgetCard({ budget }: { budget: BudgetDTO }) {
   }
 
   async function handleUpdate(data: CreateBudgetInput) {
+    const prev: CreateBudgetInput = {
+      name: budget.name,
+      category: budget.category,
+      period: budget.period,
+      limitPaise: budget.limitPaise,
+      rollover: budget.rollover,
+      startDate: budget.startDate,
+    }
     await update.mutateAsync({ id: budget._id, data })
     setEditOpen(false)
-    toast.success(`Updated "${data.name}" budget`)
+    toast.success(`Updated "${data.name}" budget`, {
+      action: {
+        label: "Undo",
+        onClick: async () => {
+          await update.mutateAsync({ id: budget._id, data: prev })
+          toast.success("Budget reverted")
+        },
+      },
+    })
   }
 
   return (
