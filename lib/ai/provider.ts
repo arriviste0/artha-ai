@@ -47,7 +47,7 @@ async function geminiGenerate({ prompt, json }: GenerateOpts): Promise<string> {
   if (!key) throw new Error("GEMINI_API_KEY not set")
   const genAI = new GoogleGenerativeAI(key)
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_CHAT_MODEL ?? "gemini-2.0-flash",
+    model: process.env.GEMINI_CHAT_MODEL ?? "gemini-2.5-flash",
     generationConfig: json ? { responseMimeType: "application/json" } : undefined,
   })
 

@@ -27,7 +27,7 @@ export interface PDFParseResult {
 
 async function extractViaGeminiVision(pdfBuffer: Buffer): Promise<RawRow[]> {
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_VISION_MODEL ?? "gemini-2.0-flash",
+    model: process.env.GEMINI_VISION_MODEL ?? "gemini-2.5-flash",
     generationConfig: { responseMimeType: "application/json" },
   })
 
