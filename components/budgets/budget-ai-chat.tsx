@@ -38,8 +38,6 @@ interface ChatMessage {
   applied?: boolean
 }
 
-type AIProvider = "gemini" | "ollama"
-
 const QUICK_PROMPTS = [
   "I'll spend ₹3,000 more on dining this month",
   "Where can I cut back to save more?",
@@ -69,7 +67,6 @@ export function BudgetAIChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [provider, setProvider] = useState<AIProvider>("gemini")
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const updateBudget = useUpdateBudget()
@@ -98,7 +95,7 @@ export function BudgetAIChat() {
       const res = await fetch("/api/budgets/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, history, provider }),
+        body: JSON.stringify({ message: msg, history }),
       })
 
       if (!res.ok) {
@@ -164,41 +161,10 @@ export function BudgetAIChat() {
           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="h-4 w-4 text-primary" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold">AI Budget Advisor</span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Beta</Badge>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Powered by {provider === "gemini" ? "Gemini 2.5" : "Ollama"}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">AI Budget Advisor</span>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Beta</Badge>
           </div>
-        </div>
-        <div className="flex rounded-lg border bg-background p-0.5 text-xs">
-          <button
-            type="button"
-            className={cn(
-              "rounded-md px-3 py-1 font-medium transition-all",
-              provider === "gemini"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setProvider("gemini")}
-            disabled={isLoading}
-          >
-            Gemini
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded-md px-3 py-1 font-medium transition-all",
-              provider === "ollama"
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setProvider("ollama")}
-            disabled={isLoading}
-          >
-            Ollama
-          </button>
         </div>
       </div>
 
