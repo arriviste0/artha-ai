@@ -95,6 +95,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   ])
   const estimatedMonthlyIncomePaise = Math.round((incomeAgg[0]?.total ?? 0) / 3)
 
+  const validIds = new Set(budgetContexts.map((b) => b.id))
+
   try {
     const suggestion = await getBudgetAdvice(
       parsed.data.message,
@@ -103,6 +105,10 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       parsed.data.history,
       parsed.data.provider
     )
+
+    // Drop any suggestions where the AI hallucinated a non-existent budgetId
+    suggestion.suggestions = suggestion.suggestions.filter((s) => validIds.has(s.budgetId))
+
     return NextResponse.json({ suggestion })
   } catch (err) {
     console.error("Budget advisor error:", err)
