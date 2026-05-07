@@ -90,7 +90,7 @@ export default function BudgetsPage() {
         </TabsContent>
 
         <TabsContent value="advisor" className="mt-4">
-          <div className="h-[600px] flex flex-col">
+          <div className="h-[600px] flex flex-col min-h-0">
             {budgets.length === 0 ? (
               <EmptyState
                 icon={PiggyBank}

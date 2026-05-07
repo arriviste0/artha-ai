@@ -5,7 +5,6 @@ import { Send, Loader2, Sparkles, CheckCircle2, AlertTriangle, TrendingUp, Trend
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { formatINR } from "@/lib/money"
 import { useUpdateBudget } from "@/hooks/use-budgets"
@@ -158,7 +157,7 @@ export function BudgetAIChat() {
   const lastAssistantIdx = messages.reduce((acc, m, i) => (m.role === "assistant" ? i : acc), -1)
 
   return (
-    <div className="flex flex-col h-full rounded-xl border bg-card overflow-hidden">
+    <div className="flex flex-col h-full rounded-xl border bg-card overflow-hidden min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
         <div className="flex items-center gap-2.5">
@@ -203,8 +202,8 @@ export function BudgetAIChat() {
         </div>
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1" ref={scrollRef as React.RefObject<HTMLDivElement>}>
+      {/* Messages — flex-1 + min-h-0 lets this shrink so the input stays visible */}
+      <div className="flex-1 min-h-0 overflow-y-auto" ref={scrollRef}>
         <div className="px-4 py-4 space-y-6">
 
           {/* Welcome state */}
@@ -370,7 +369,7 @@ export function BudgetAIChat() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Quick prompts — only shown when empty */}
       {isEmpty && (
