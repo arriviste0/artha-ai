@@ -48,6 +48,24 @@ const QUICK_PROMPTS = [
   "I have a medical expense coming up",
 ]
 
+function getFollowUpChips(msg: ChatMessage): string[] {
+  if (msg.suggestions && msg.suggestions.length > 0) {
+    const chips: string[] = []
+    // Up to 2 category-specific chips
+    for (const s of msg.suggestions.slice(0, 2)) {
+      chips.push(s.changeRupees < 0 ? `Don't reduce ${s.category}` : `Increase ${s.category} less`)
+    }
+    chips.push("Show a more conservative plan")
+    chips.push("Try a completely different approach")
+    return chips.slice(0, 4)
+  }
+  return [
+    "Give me more budget ideas",
+    "Help me save more",
+    "What categories should I review?",
+  ]
+}
+
 export function BudgetAIChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
@@ -137,6 +155,7 @@ export function BudgetAIChat() {
   }
 
   const isEmpty = messages.length === 0
+  const lastAssistantIdx = messages.reduce((acc, m, i) => (m.role === "assistant" ? i : acc), -1)
 
   return (
     <div className="flex flex-col h-full rounded-xl border bg-card overflow-hidden">
@@ -241,6 +260,24 @@ export function BudgetAIChat() {
                         <p key={wi} className="text-xs text-yellow-700 dark:text-yellow-400">{w}</p>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Follow-up chips — only on the last assistant message while not loading */}
+                {msg.role === "assistant" && i === lastAssistantIdx && !isLoading && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {getFollowUpChips(msg).map((chip) => (
+                      <button
+                        key={chip}
+                        onClick={() => {
+                          setInput(chip)
+                          setTimeout(() => inputRef.current?.focus(), 0)
+                        }}
+                        className="text-[11px] border rounded-full px-2.5 py-1 bg-background hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                      >
+                        {chip}
+                      </button>
+                    ))}
                   </div>
                 )}
 
