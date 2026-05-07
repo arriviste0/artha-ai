@@ -43,7 +43,7 @@ export async function getBudgetAdvice(
   const budgetSummary = budgets
     .map(
       (b) =>
-        `- id:${b.id} | ${b.category}: limit ₹${(b.limitPaise / 100).toFixed(0)}, spent so far ₹${(b.spentPaise / 100).toFixed(0)} (${b.period})`
+        `- ${b.category} (budgetId="${b.id}"): limit ₹${(b.limitPaise / 100).toFixed(0)}, spent ₹${(b.spentPaise / 100).toFixed(0)} (${b.period})`
     )
     .join("\n")
 
@@ -73,7 +73,7 @@ Respond ONLY with valid JSON matching this exact schema:
   "analysis": "brief analysis of the current budget and what needs to change",
   "suggestions": [
     {
-      "budgetId": "<exact id: value from the budget list above>",
+      "budgetId": "<copy the budgetId string exactly as it appears in quotes above>",
       "category": "<category name>",
       "currentLimitPaise": <integer paise>,
       "suggestedLimitPaise": <integer paise>,

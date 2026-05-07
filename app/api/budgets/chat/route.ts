@@ -106,8 +106,10 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       parsed.data.provider
     )
 
-    // Drop any suggestions where the AI hallucinated a non-existent budgetId
-    suggestion.suggestions = suggestion.suggestions.filter((s) => validIds.has(s.budgetId))
+    // Normalise budgetId (strip accidental "id:" prefix) then drop hallucinated ones
+    suggestion.suggestions = suggestion.suggestions
+      .map((s) => ({ ...s, budgetId: s.budgetId.replace(/^id:/i, "").trim() }))
+      .filter((s) => validIds.has(s.budgetId))
 
     return NextResponse.json({ suggestion })
   } catch (err) {

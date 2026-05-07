@@ -4,8 +4,13 @@ import { connectDB } from "@/lib/db"
 import Budget from "@/models/budget"
 import AuditLog from "@/models/audit-log"
 import { updateBudgetSchema } from "@/lib/validators/budget"
+import mongoose from "mongoose"
 
 export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
+  if (!mongoose.Types.ObjectId.isValid(params?.id ?? "")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   const body: unknown = await req.json()
   const parsed = updateBudgetSchema.safeParse(body)
   if (!parsed.success) {
@@ -41,6 +46,10 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
 })
 
 export const DELETE = withAuth(async (_req: NextRequest, { userId, params }) => {
+  if (!mongoose.Types.ObjectId.isValid(params?.id ?? "")) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  }
+
   await connectDB()
   const budget = await Budget.findOne({ _id: params?.id, userId })
   if (!budget) return NextResponse.json({ error: "Not found" }, { status: 404 })
