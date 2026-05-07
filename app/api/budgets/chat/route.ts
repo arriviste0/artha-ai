@@ -9,7 +9,7 @@ import { z } from "zod"
 
 const chatRequestSchema = z.object({
   message: z.string().min(1).max(1000),
-  provider: z.enum(["gemini", "ollama"]).optional(),
+  provider: z.enum(["groq", "ollama"]).optional(),
   history: z
     .array(
       z.object({
@@ -32,7 +32,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       return NextResponse.json(
         {
           error:
-            parsed.data.provider === "gemini"
+            parsed.data.provider === "groq"
               ? "Gemini requires GEMINI_API_KEY to be configured."
               : "Local Ollama requires OLLAMA_BASE_URL and OLLAMA_MODEL to be configured.",
         },
@@ -43,7 +43,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     const { available } = getAIAvailability()
     if (!available) {
       return NextResponse.json(
-        { error: "AI features require AI_DEFAULT_PROVIDER to include gemini with GEMINI_API_KEY or ollama with a local Ollama server." },
+        { error: "AI features require AI_DEFAULT_PROVIDER to include groq with GEMINI_API_KEY or ollama with a local Ollama server." },
         { status: 503 }
       )
     }

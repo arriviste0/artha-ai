@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import Groq from "groq-sdk"
 
 interface GenerateOpts {
   prompt: string
@@ -6,10 +6,10 @@ interface GenerateOpts {
   provider?: AIProviderName
 }
 
-export type AIProviderName = "gemini" | "ollama"
+export type AIProviderName = "groq" | "ollama"
 
 function parseProviderList(value: string | undefined): string[] {
-  const withoutComment = (value ?? "gemini")
+  const withoutComment = (value ?? "groq")
     .split("#", 1)[0]
     .trim()
 
@@ -21,7 +21,7 @@ function parseProviderList(value: string | undefined): string[] {
 
 export function getAIProviderChain(): AIProviderName[] {
   return parseProviderList(process.env.AI_DEFAULT_PROVIDER).filter(
-    (name): name is AIProviderName => name === "gemini" || name === "ollama"
+    (name): name is AIProviderName => name === "groq" || name === "ollama"
   )
 }
 
@@ -29,48 +29,31 @@ export function getAIAvailability() {
   const providers = getAIProviderChain()
   return {
     providers,
-    geminiReady: providers.includes("gemini") && !!process.env.GEMINI_API_KEY,
+    groqReady: providers.includes("groq") && !!process.env.GROQ_API_KEY,
     ollamaReady: providers.includes("ollama"),
     available: providers.some((provider) =>
-      provider === "gemini" ? !!process.env.GEMINI_API_KEY : true
+      provider === "groq" ? !!process.env.GROQ_API_KEY : true
     ),
   }
 }
 
 export function isAIProviderAvailable(provider: AIProviderName): boolean {
-  if (provider === "gemini") return !!process.env.GEMINI_API_KEY
+  if (provider === "groq") return !!process.env.GROQ_API_KEY
   return true
 }
 
-async function geminiGenerate({ prompt, json }: GenerateOpts): Promise<string> {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) throw new Error("GEMINI_API_KEY not set")
-  const genAI = new GoogleGenerativeAI(key)
-  const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_CHAT_MODEL ?? "gemini-2.5-flash",
-    generationConfig: json ? { responseMimeType: "application/json" } : undefined,
+async function groqGenerate({ prompt, json }: GenerateOpts): Promise<string> {
+  const key = process.env.GROQ_API_KEY
+  if (!key) throw new Error("GROQ_API_KEY not set")
+  const groq = new Groq({ apiKey: key })
+
+  const completion = await groq.chat.completions.create({
+    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    messages: [{ role: "user", content: prompt }],
+    ...(json ? { response_format: { type: "json_object" } } : {}),
   })
 
-  const attempt = () => model.generateContent(prompt).then((r) => r.response.text())
-
-  try {
-    return await attempt()
-  } catch (err) {
-    const msg = (err as Error).message ?? ""
-    if (msg.includes("429")) {
-      // Retry once after the server-suggested delay for per-minute rate limits (≤30s)
-      const match = msg.match(/retry.*?(\d+(?:\.\d+)?)s/i)
-      const delaySec = match ? parseFloat(match[1]) : 0
-      if (delaySec > 0 && delaySec <= 30) {
-        await new Promise((r) => setTimeout(r, delaySec * 1000))
-        return await attempt()
-      }
-      throw new Error(
-        "Gemini free-tier quota exhausted. Generate a new key at aistudio.google.com/app/apikey or enable billing at console.cloud.google.com."
-      )
-    }
-    throw err
-  }
+  return completion.choices[0]?.message?.content ?? ""
 }
 
 async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
@@ -92,14 +75,14 @@ async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
 }
 
 // Tries each provider in AI_DEFAULT_PROVIDER order, falling back on error.
-// Format: "gemini" | "ollama" | "gemini,ollama" | "ollama,gemini"
+// Format: "groq" | "ollama" | "groq,ollama" | "ollama,groq"
 export async function aiGenerate(opts: GenerateOpts): Promise<string> {
   const chain = opts.provider ? [opts.provider] : getAIProviderChain()
 
   let lastError: Error | undefined
   for (const name of chain) {
     try {
-      if (name === "gemini") return await geminiGenerate(opts)
+      if (name === "groq") return await groqGenerate(opts)
       if (name === "ollama") return await ollamaGenerate(opts)
     } catch (err) {
       lastError = err as Error
