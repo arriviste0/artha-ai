@@ -27,7 +27,7 @@ const formSchema = z.object({
   priority: z.number().int().min(1).max(5).default(3),
 })
 
-type FormValues = z.infer<typeof formSchema>
+type FormValues = z.input<typeof formSchema>
 
 interface Props {
   onSubmit: (data: z.infer<typeof createGoalSchema>) => Promise<void>
@@ -67,7 +67,7 @@ export function GoalForm({ onSubmit, onCancel, defaultValues, submitLabel = "Cre
       targetPaise: Math.round(values.targetRupees * 100),
       monthlyContributionPaise: Math.round((values.monthlyRupees ?? 0) * 100),
       targetDate: values.targetDate ? new Date(values.targetDate).toISOString() : undefined,
-      priority: values.priority,
+      priority: values.priority ?? 3,
     })
   }
 
