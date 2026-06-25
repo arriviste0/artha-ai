@@ -3,6 +3,7 @@ import { withAuth } from "@/lib/with-auth"
 import { connectDB } from "@/lib/db"
 import StatementUpload from "@/models/statement-upload"
 import { getStorageProvider } from "@/lib/providers/storage"
+import { getUploadDir } from "@/lib/providers/storage/local"
 import { parseCSV } from "@/lib/parsers/csv"
 import { parsePDF } from "@/lib/parsers/pdf"
 import { buildDraftTransactions } from "@/lib/parsers/categorize"
@@ -39,7 +40,7 @@ export const POST = withAuth(async (req: NextRequest, { userId, params }) => {
       buffer = Buffer.from(await res.arrayBuffer())
     } else {
       // Local: read directly
-      const filePath = path.join(process.cwd(), "uploads", upload.fileKey)
+      const filePath = path.join(getUploadDir(), upload.fileKey)
       buffer = await fs.readFile(filePath)
     }
 

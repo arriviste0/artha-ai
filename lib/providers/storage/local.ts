@@ -1,8 +1,16 @@
 import fs from "fs/promises"
 import path from "path"
+import os from "os"
 import type { StorageProvider } from "./index"
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads")
+export const getUploadDir = () => {
+  if (process.env.VERCEL || process.env.AWS_REGION) { // AWS_REGION is set in lambda/vercel
+    return path.join(os.tmpdir(), "uploads")
+  }
+  return path.join(process.cwd(), "uploads")
+}
+
+const UPLOAD_DIR = getUploadDir()
 
 export class LocalStorageProvider implements StorageProvider {
   async upload(key: string, buffer: Buffer): Promise<string> {

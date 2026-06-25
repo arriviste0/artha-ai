@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import fs from "fs/promises"
 import path from "path"
+import { getUploadDir } from "@/lib/providers/storage/local"
 
 export async function GET(
   _req: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const filePath = path.join(process.cwd(), "uploads", fileKey)
+  const filePath = path.join(getUploadDir(), fileKey)
   try {
     const buffer = await fs.readFile(filePath)
     const ext = path.extname(filePath).toLowerCase()
