@@ -59,13 +59,13 @@ export const POST = withAuth(async (_req: NextRequest, { userId }) => {
     })),
     activeGoals: goals.map((g) => ({
       name: g.name,
-      targetAmount: paiseToRupees(g.targetAmountPaise),
-      currentAmount: paiseToRupees(g.currentAmountPaise),
-      deadline: g.deadline,
+      targetAmount: paiseToRupees(g.targetPaise),
+      currentAmount: paiseToRupees(g.currentPaise),
+      deadline: g.targetDate,
     })),
     investments: investments.map((i) => ({
       name: i.name,
-      type: i.type,
+      type: i.instrument,
       currentValue: paiseToRupees(i.currentValuePaise),
     })),
   }
