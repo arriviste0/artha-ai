@@ -135,24 +135,20 @@ export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PD
   const errors: string[] = []
 
   try {
-    const { PDFParse, PasswordException } = await import("pdf-parse")
-    // We don't manually setWorker because path.join(process.cwd(), "node_modules", ...) 
-    // fails on Vercel and with pnpm's symlinked dependencies. pdf-parse/pdfjs-dist 
-    // will fallback to the built-in fake worker automatically.
-    const parser = new PDFParse({ data: pdfBuffer, password })
-    let textResult: Awaited<ReturnType<typeof parser.getText>>
+    // pdf-parse 1.1.1 uses a simple function API and natively avoids worker issues
+    const pdfParse = (await import("pdf-parse")).default || await import("pdf-parse")
+    let text = ""
+    
     try {
-      textResult = await parser.getText()
-    } catch (err) {
-      if (err instanceof PasswordException) {
+      // @ts-ignore
+      const data = await pdfParse(pdfBuffer)
+      text = data.text
+    } catch (err: any) {
+      if (err.name === "PasswordException" || err.message?.includes("Password")) {
         return { rows: [], method: "pdf_text", errors: ["PASSWORD_REQUIRED"] }
       }
       throw err
-    } finally {
-      await parser.destroy()
     }
-
-    const text = textResult.text
 
     if (!looksLikeGarbage(text)) {
       const redacted = redactPII(text)
