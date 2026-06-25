@@ -92,7 +92,20 @@ export async function buildDraftTransactions(rows: RawRow[]): Promise<DraftTrans
 
     const ruleMatch = applyRules(row.description)
 
-    if (ruleMatch) {
+    if (row.aiAssigned) {
+      drafts.push({
+        rawLine: row.rawLine,
+        occurredAt: row.date + "T00:00:00.000Z",
+        description: row.description,
+        amountPaise,
+        type,
+        category: row.aiAssigned.category,
+        merchant: row.aiAssigned.merchant,
+        confidence: row.aiAssigned.confidence,
+        needsReview: row.aiAssigned.confidence < 0.75,
+        status: "pending",
+      })
+    } else if (ruleMatch) {
       drafts.push({
         rawLine: row.rawLine,
         occurredAt: row.date + "T00:00:00.000Z",

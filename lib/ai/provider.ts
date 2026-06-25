@@ -79,14 +79,14 @@ async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
 export async function aiGenerate(opts: GenerateOpts): Promise<string> {
   const chain = opts.provider ? [opts.provider] : getAIProviderChain()
 
-  let lastError: Error | undefined
+  const errors: string[] = []
   for (const name of chain) {
     try {
       if (name === "groq") return await groqGenerate(opts)
       if (name === "ollama") return await ollamaGenerate(opts)
     } catch (err) {
-      lastError = err as Error
+      errors.push(`${name}: ${(err as Error).message}`)
     }
   }
-  throw lastError ?? new Error("No AI provider available — check AI_DEFAULT_PROVIDER in .env")
+  throw new Error(`AI generation failed. Errors: ${errors.join(" | ")}`)
 }

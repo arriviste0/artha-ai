@@ -8,6 +8,11 @@ export interface RawRow {
   credit: number
   balance?: number
   rawLine: string
+  aiAssigned?: {
+    category: string
+    merchant?: string
+    confidence: number
+  }
 }
 
 type BankFormat = "hdfc" | "icici" | "sbi" | "axis" | "generic"
@@ -73,22 +78,32 @@ function parseAmount(val: string | number | undefined): number {
   return isNaN(Number(cleaned)) ? 0 : Number(cleaned)
 }
 
-function normalizeDate(raw: string): string {
-  // Accept DD/MM/YYYY, DD-MM-YYYY, MM/DD/YYYY, YYYY-MM-DD
+export function normalizeDate(raw: string): string {
   const s = raw.trim()
   const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (dmySlash) {
     const [, d, m, y] = dmySlash
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+    const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+    if (!isNaN(Date.parse(iso))) return iso
   }
   const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
   if (dmyDash) {
     const [, d, m, y] = dmyDash
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+    const iso = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+    if (!isNaN(Date.parse(iso))) return iso
   }
-  // Already ISO
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  return s
+  
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const iso = s.slice(0, 10)
+    if (!isNaN(Date.parse(iso))) return iso
+  }
+
+  const parsed = Date.parse(s)
+  if (!isNaN(parsed)) {
+    return new Date(parsed).toISOString().slice(0, 10)
+  }
+
+  return ""
 }
 
 export interface CSVParseResult {

@@ -1,8 +1,10 @@
 import { redactPII } from "@/lib/ai/redact"
-import type { RawRow } from "./csv"
+import { type RawRow, normalizeDate } from "./csv"
 import { rupeesToPaise } from "@/lib/money"
 import path from "path"
 import { pathToFileURL } from "url"
+import { aiGenerate } from "@/lib/ai/provider"
+import { z } from "zod"
 
 export interface PDFParseResult {
   rows: RawRow[]
@@ -16,44 +18,108 @@ function looksLikeGarbage(text: string): boolean {
   return nonPrintable / text.length > 0.05
 }
 
-function extractFromText(text: string): RawRow[] {
-  const rows: RawRow[] = []
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean)
 
-  const txnPattern =
-    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s+(.+?)\s+([\d,]+(?:\.\d{2})?)\s+([\d,]+(?:\.\d{2})?)?/
+async function extractTransactionsWithAI(text: string): Promise<RawRow[]> {
+  const CATEGORIES = [
+    "Food & Dining", "Rent / Housing", "Transport", "Utilities", "Healthcare",
+    "Entertainment", "Shopping", "Education", "Insurance", "Investments",
+    "EMI / Loans", "Personal Care", "Salary", "Freelance Income",
+    "Business Income", "Transfer", "Other",
+  ]
 
-  for (const line of lines) {
-    const m = txnPattern.exec(line)
-    if (!m) continue
-
-    const [, rawDate, desc, col3, col4] = m
-    const dateParts = rawDate.split(/[\/\-]/)
-    let dateStr = rawDate
-    if (dateParts.length === 3) {
-      const [a, b, c] = dateParts
-      if (c.length === 4) {
-        dateStr = `${c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`
-      } else if (a.length === 4) {
-        dateStr = `${a}-${b.padStart(2, "0")}-${c.padStart(2, "0")}`
-      }
-    }
-
-    const amt3 = parseFloat(col3.replace(/,/g, "")) || 0
-    const amt4 = col4 ? parseFloat(col4.replace(/,/g, "")) || 0 : 0
-
-    if (amt3 === 0 && amt4 === 0) continue
-
-    rows.push({
-      date: dateStr,
-      description: desc.trim(),
-      debit: rupeesToPaise(amt3),
-      credit: rupeesToPaise(amt4),
-      rawLine: line,
-    })
+  const CHUNK_SIZE = 5000
+  const chunks = []
+  for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+    chunks.push(text.slice(i, i + CHUNK_SIZE))
   }
 
-  return rows
+  const allTransactions: any[] = []
+
+  for (const chunk of chunks) {
+    const prompt = `You are a financial data extraction AI. Extract all bank transactions from the following account statement text.
+CRITICAL INSTRUCTIONS:
+1. Identify the Bank Name and Statement Type based on headers or text.
+2. Extract the Date, Description, Amount, and Type (credit or debit).
+3. CAREFULLY ignore running balances, closing balances, or opening balances. ONLY extract the actual transaction amount.
+4. Analyze the vendor name, payment gateway (e.g. Razorpay, UPI), and description carefully to assign the most accurate category from the allowed list: ${CATEGORIES.join(", ")}.
+5. Also extract the explicit Merchant/Vendor name if discernible.
+6. Provide a confidence score (0-1).
+
+Return JSON in this format:
+{
+  "statementType": "...",
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "description": "...",
+      "debit": 0, // actual withdrawal amount in rupees if debit, else 0. Do NOT use the running balance.
+      "credit": 0, // actual deposit amount in rupees if credit, else 0. Do NOT use the running balance.
+      "category": "...",
+      "merchant": "...",
+      "confidence": 0.95,
+      "rawLine": "..." // the original text line that matched
+    }
+  ]
+}
+
+Text:
+${chunk}`
+
+    let textRes = await aiGenerate({ prompt, json: true })
+    
+    const schema = z.object({
+      statementType: z.string().optional(),
+      transactions: z.array(z.object({
+        date: z.string(),
+        description: z.string(),
+        debit: z.number(),
+        credit: z.number(),
+        category: z.string(),
+        merchant: z.string().optional(),
+        confidence: z.number(),
+        rawLine: z.string().optional()
+      }))
+    })
+
+    let parsed
+    try {
+      const cleanJson = textRes.replace(/```json/g, "").replace(/```/g, "").trim()
+      parsed = schema.parse(JSON.parse(cleanJson))
+    } catch {
+      try {
+        textRes = await aiGenerate({ prompt, json: true })
+        const cleanJson = textRes.replace(/```json/g, "").replace(/```/g, "").trim()
+        parsed = schema.parse(JSON.parse(cleanJson))
+      } catch (err) {
+        console.error("Failed to parse chunk:", err)
+        continue // Skip broken chunk to avoid failing entire PDF
+      }
+    }
+    
+    if (parsed && parsed.transactions) {
+      allTransactions.push(...parsed.transactions)
+    }
+  }
+
+  return allTransactions.map((t) => {
+    let finalDate = normalizeDate(t.date)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(finalDate)) {
+      finalDate = new Date().toISOString().slice(0, 10)
+    }
+    
+    return {
+      date: finalDate,
+      description: t.description,
+      debit: rupeesToPaise(t.debit),
+      credit: rupeesToPaise(t.credit),
+      rawLine: t.rawLine || t.description,
+      aiAssigned: {
+        category: t.category,
+        merchant: t.merchant,
+        confidence: t.confidence,
+      },
+    }
+  })
 }
 
 export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PDFParseResult> {
@@ -83,7 +149,14 @@ export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PD
 
     if (!looksLikeGarbage(text)) {
       const redacted = redactPII(text)
-      const rows = extractFromText(redacted)
+      let rows: RawRow[] = []
+      
+      try {
+        rows = await extractTransactionsWithAI(redacted)
+      } catch (aiErr) {
+        errors.push(`AI parsing failed: ${(aiErr as Error).message}`)
+      }
+
       if (rows.length > 0) {
         return { rows, method: "pdf_text", errors }
       }

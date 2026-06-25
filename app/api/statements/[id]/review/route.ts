@@ -67,19 +67,22 @@ export const POST = withAuth(async (_req: NextRequest, { userId, params }) => {
     return NextResponse.json({ error: "No accepted transactions to commit" }, { status: 400 })
   }
 
-  const txnsToInsert = accepted.map((d) => ({
-    userId,
-    accountId: upload.accountId,
-    type: d.type,
-    amountPaise: d.amountPaise,
-    description: d.description,
-    category: d.category,
-    merchant: d.merchant,
-    occurredAt: new Date(d.occurredAt),
-    source: upload.mimeType === "text/csv" ? "statement_csv" : "statement_pdf",
-    sourceFileId: upload._id.toString(),
-    tags: [],
-  }))
+  const txnsToInsert = accepted.map((d) => {
+    const parsedDate = new Date(d.occurredAt)
+    return {
+      userId,
+      accountId: upload.accountId,
+      type: d.type,
+      amountPaise: d.amountPaise,
+      description: d.description,
+      category: d.category,
+      merchant: d.merchant,
+      occurredAt: isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
+      source: upload.mimeType === "text/csv" ? "statement_csv" : "statement_pdf",
+      sourceFileId: upload._id.toString(),
+      tags: [],
+    }
+  })
 
   const inserted = await Transaction.insertMany(txnsToInsert)
 
