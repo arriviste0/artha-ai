@@ -6,6 +6,15 @@ import { pathToFileURL } from "url"
 import { aiGenerate } from "@/lib/ai/provider"
 import { z } from "zod"
 
+// Polyfill DOMMatrix and Path2D for pdf-parse in Node.js environment
+if (typeof globalThis.DOMMatrix === "undefined") {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor() { return [1, 0, 0, 1, 0, 0]; }
+  } as any;
+}
+if (typeof globalThis.Path2D === "undefined") {
+  globalThis.Path2D = class Path2D {} as any;
+}
 export interface PDFParseResult {
   rows: RawRow[]
   method: "pdf_text" | "pdf_vision"
