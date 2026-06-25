@@ -136,11 +136,9 @@ export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PD
 
   try {
     const { PDFParse, PasswordException } = await import("pdf-parse")
-    PDFParse.setWorker(
-      pathToFileURL(
-        path.join(process.cwd(), "node_modules", "pdf-parse", "dist", "pdf-parse", "esm", "pdf.worker.mjs")
-      ).toString()
-    )
+    // We don't manually setWorker because path.join(process.cwd(), "node_modules", ...) 
+    // fails on Vercel and with pnpm's symlinked dependencies. pdf-parse/pdfjs-dist 
+    // will fallback to the built-in fake worker automatically.
     const parser = new PDFParse({ data: pdfBuffer, password })
     let textResult: Awaited<ReturnType<typeof parser.getText>>
     try {
