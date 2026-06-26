@@ -86,7 +86,7 @@ importers:
       papaparse:
         specifier: ^5.5.3
         version: 5.5.3
-      pdf-parse:
+      pdf-parse-fixed:
         specifier: ^1.1.1
         version: 1.1.1
       radix-ui:
@@ -3414,8 +3414,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-parse@1.1.1:
-    resolution: {integrity: sha512-v6ZJ/efsBpGrGGknjtq9J/oC8tZWq0KWL5vQrk2GlzLEQPUDB1ex+13Rmidl1neNN358Jn9EHZw5y07FFtaC7A==}
+  pdf-parse-fixed@1.1.1:
+    resolution: {integrity: sha512-SB7pixXtZOd+tf9eCPccaM8JCtv51FqPKoGKZW3AJ1HCJkb/v+prnPNW734ihxL/YbteCoZRuw4QTfJ3CuOk9g==}
     engines: {node: '>=6.8.1'}
 
   picocolors@1.1.1:
@@ -7704,7 +7704,7 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-parse@1.1.1:
+  pdf-parse-fixed@1.1.1:
     dependencies:
       debug: 3.2.7
       node-ensure: 0.0.0

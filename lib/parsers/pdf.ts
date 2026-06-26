@@ -136,7 +136,7 @@ export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PD
 
   try {
     // pdf-parse 1.1.1 uses a simple function API and natively avoids worker issues
-    const pdfParse = (await import("pdf-parse")).default || await import("pdf-parse")
+    const pdfParse = (await import("pdf-parse-fixed")).default || await import("pdf-parse-fixed")
     let text = ""
     
     try {
