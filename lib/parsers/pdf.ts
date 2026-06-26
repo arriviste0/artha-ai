@@ -49,7 +49,7 @@ async function extractTransactionsWithAI(text: string): Promise<RawRow[]> {
 CRITICAL INSTRUCTIONS:
 1. Identify the Bank Name and Statement Type based on headers or text.
 2. Extract the Date, Description, Amount, and Type (credit or debit).
-3. CAREFULLY ignore running balances, closing balances, or opening balances. ONLY extract the actual transaction amount.
+3. CRITICAL: DO NOT extract running balances, closing balances, or opening balances as the debit/credit amount. The debit/credit amount is ONLY the money that was actually spent or received in that specific transaction. If a number constantly increases or decreases alongside the transaction, it is a BALANCE and MUST BE IGNORED.
 4. Analyze the vendor name, payment gateway (e.g. Razorpay, UPI), and description carefully to assign the most accurate category from the allowed list: ${CATEGORIES.join(", ")}.
 5. Also extract the explicit Merchant/Vendor name if discernible.
 6. Provide a confidence score (0-1).
@@ -61,8 +61,8 @@ Return JSON in this format:
     {
       "date": "YYYY-MM-DD",
       "description": "...",
-      "debit": 0, // actual withdrawal amount in rupees if debit, else 0. Do NOT use the running balance.
-      "credit": 0, // actual deposit amount in rupees if credit, else 0. Do NOT use the running balance.
+      "debit": 0, // EXACT withdrawal/debit amount in rupees (or 0). MUST NOT BE THE RUNNING BALANCE OR CLOSING BALANCE!
+      "credit": 0, // EXACT deposit/credit amount in rupees (or 0). MUST NOT BE THE RUNNING BALANCE OR CLOSING BALANCE!
       "category": "...",
       "merchant": "...",
       "confidence": 0.95,
