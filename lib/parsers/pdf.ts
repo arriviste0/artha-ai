@@ -142,9 +142,10 @@ export async function parsePDF(pdfBuffer: Buffer, password?: string): Promise<PD
     
     try {
       // @ts-ignore
-      const data = await pdfParse(pdfBuffer)
+      const data = await pdfParse(password ? { data: pdfBuffer, password } : pdfBuffer)
       text = data.text
     } catch (err: any) {
+      // pdf.js throws an error with name PasswordException if a password is required or incorrect
       if (err.name === "PasswordException" || err.message?.includes("Password")) {
         return { rows: [], method: "pdf_text", errors: ["PASSWORD_REQUIRED"] }
       }
