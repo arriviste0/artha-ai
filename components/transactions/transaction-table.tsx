@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal } from "lucide-react"
+import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -41,7 +41,35 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
   const { data: accounts = [] } = useAccounts()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingTxn, setEditingTxn] = useState<TransactionDTO | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const totalPages = Math.ceil(total / limit)
+
+  const isAllSelected = transactions.length > 0 && selectedIds.size === transactions.length
+
+  function handleSelectAll() {
+    if (isAllSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(transactions.map(t => t._id)))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!selectedIds.size) return
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} transactions?`)) return
+
+    setIsBulkDeleting(true)
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => del.mutateAsync(id)))
+      setSelectedIds(new Set())
+      toast.success("Transactions deleted successfully")
+    } catch {
+      toast.error("Failed to delete some transactions")
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }
 
   async function handleDelete(id: string) {
     setDeletingId(id)
@@ -87,10 +115,33 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
 
   return (
     <div className="space-y-4">
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border">
+          <span className="text-sm font-medium">{selectedIds.size} transaction{selectedIds.size > 1 ? 's' : ''} selected</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleBulkDelete}
+            disabled={isBulkDeleting}
+          >
+            {isBulkDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Delete Selected
+          </Button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border">
         <table className="min-w-[520px] w-full text-sm sm:min-w-0">
           <thead className="bg-muted/50 border-b">
             <tr>
+              <th className="w-12 px-4 py-3">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                  checked={isAllSelected}
+                  onChange={handleSelectAll}
+                />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Date</th>
               <th className="hidden text-left px-4 py-3 font-medium text-muted-foreground sm:table-cell">Description</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Category</th>
@@ -110,6 +161,19 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                     txn.needsReview && "bg-yellow-50/50 dark:bg-yellow-900/10"
                   )}
                 >
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-muted-foreground/30 text-primary focus:ring-primary"
+                      checked={selectedIds.has(txn._id)}
+                      onChange={() => {
+                        const next = new Set(selectedIds)
+                        if (next.has(txn._id)) next.delete(txn._id)
+                        else next.add(txn._id)
+                        setSelectedIds(next)
+                      }}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                     <span className="hidden sm:inline">
                       {date.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
