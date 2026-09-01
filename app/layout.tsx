@@ -9,6 +9,11 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "ArthaAI — Personal Finance",
   description: "Manage your entire financial life with AI-powered insights",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
