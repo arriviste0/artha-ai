@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import mongoose from "mongoose"
 import { withAuth } from "@/lib/with-auth"
 import { connectDB } from "@/lib/db"
 import Transaction from "@/models/transaction"
@@ -33,13 +34,55 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
   if (needsReview !== undefined) filter.needsReview = needsReview
   if (search) filter.description = { $regex: search, $options: "i" }
 
+  const aggFilter: Record<string, unknown> = {
+    userId: new mongoose.Types.ObjectId(userId),
+  }
+  if (from || to) {
+    aggFilter.occurredAt = filter.occurredAt
+  }
+  if (category) aggFilter.category = category
+  if (accountId && mongoose.Types.ObjectId.isValid(accountId)) {
+    aggFilter.accountId = new mongoose.Types.ObjectId(accountId)
+  }
+  if (needsReview !== undefined) aggFilter.needsReview = needsReview
+  if (search) aggFilter.description = filter.description
+
   await connectDB()
-  const [transactions, total] = await Promise.all([
+  const [transactions, total, statsAgg] = await Promise.all([
     Transaction.find(filter).sort({ occurredAt: -1 }).skip(skip).limit(limit).lean(),
     Transaction.countDocuments(filter),
+    Transaction.aggregate([
+      { $match: aggFilter },
+      {
+        $group: {
+          _id: "$type",
+          totalPaise: { $sum: "$amountPaise" },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
   ])
 
-  return NextResponse.json({ transactions, total, page, limit })
+  type AggRow = { _id: string; totalPaise: number; count: number }
+  const statsMap = Object.fromEntries(statsAgg.map((s: AggRow) => [s._id, s.totalPaise]))
+
+  const totalIncomePaise = statsMap.credit ?? 0
+  const totalExpensesPaise = statsMap.debit ?? 0
+  const netSpendingPaise = totalExpensesPaise - totalIncomePaise
+  const netCashflowPaise = totalIncomePaise - totalExpensesPaise
+
+  return NextResponse.json({
+    transactions,
+    total,
+    page,
+    limit,
+    stats: {
+      totalIncomePaise,
+      totalExpensesPaise,
+      netSpendingPaise,
+      netCashflowPaise,
+    },
+  })
 })
 
 export const POST = withAuth(async (req: NextRequest, { userId }) => {

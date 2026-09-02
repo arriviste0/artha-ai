@@ -30,20 +30,35 @@ export interface TransactionFiltersInput {
   limit?: number
 }
 
+export interface TransactionStats {
+  totalIncomePaise: number
+  totalExpensesPaise: number
+  netSpendingPaise: number
+  netCashflowPaise: number
+}
+
+export interface TransactionsResponse {
+  transactions: TransactionDTO[]
+  total: number
+  stats?: TransactionStats
+  page?: number
+  limit?: number
+}
+
 async function fetchTransactions(
   filters: TransactionFiltersInput
-): Promise<{ transactions: TransactionDTO[]; total: number }> {
+): Promise<TransactionsResponse> {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([k, v]) => {
     if (v !== undefined && v !== "") params.set(k, String(v))
   })
   const res = await fetch(`/api/transactions?${params}`)
   if (!res.ok) throw new Error("Failed to fetch transactions")
-  return res.json() as Promise<{ transactions: TransactionDTO[]; total: number }>
+  return res.json() as Promise<TransactionsResponse>
 }
 
 export function useTransactions(filters: TransactionFiltersInput = {}) {
-  return useQuery({
+  return useQuery<TransactionsResponse>({
     queryKey: ["transactions", filters],
     queryFn: () => fetchTransactions(filters),
   })
