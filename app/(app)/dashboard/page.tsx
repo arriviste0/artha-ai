@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { LayoutDashboard, Plus, RefreshCw, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,19 +11,25 @@ import { CashflowCard } from "@/components/dashboard/cashflow-card"
 import { CategorySpendCard } from "@/components/dashboard/category-spend-card"
 import { AccountsOverviewCard } from "@/components/dashboard/accounts-overview-card"
 import { GoalsSummaryCard } from "@/components/dashboard/goals-summary-card"
-import { useDashboard } from "@/hooks/use-dashboard"
+import { DashboardFilters } from "@/components/dashboard/dashboard-filters"
+import { KPIStatsGrid } from "@/components/dashboard/kpi-stats-grid"
+import { useDashboard, type DashboardFilterParams } from "@/hooks/use-dashboard"
 import { cn } from "@/lib/utils"
 
 export default function DashboardPage() {
-  const { data, isLoading, isFetching, refetch } = useDashboard()
+  const [filters, setFilters] = useState<DashboardFilterParams>({ period: "this_month" })
+  const { data, isLoading, isFetching, refetch } = useDashboard(filters)
   const hasData = (data?.accounts.length ?? 0) > 0
 
   return (
     <div className="space-y-6">
+      {/* Top Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Your financial overview at a glance</p>
+          <h1 className="text-2xl font-bold tracking-tight">Financial Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Real-time KPIs, cashflow analysis, and net worth tracking
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -44,6 +51,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Date & Period Filters */}
+      <DashboardFilters
+        filters={filters}
+        onFilterChange={setFilters}
+        activePeriodLabel={data?.period?.label}
+      />
+
+      {/* Advanced KPI Stats Grid */}
+      <KPIStatsGrid data={data} isLoading={isLoading} />
+
       {!isLoading && !hasData ? (
         <EmptyState
           icon={LayoutDashboard}
@@ -62,16 +79,16 @@ export default function DashboardPage() {
           <TabsContent value="overview" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <NetWorthCard />
-              <CashflowCard />
-              <CategorySpendCard />
+              <CashflowCard data={data} isLoading={isLoading} />
+              <CategorySpendCard data={data} isLoading={isLoading} />
               <AccountsOverviewCard />
             </div>
             <GoalsSummaryCard />
           </TabsContent>
 
           <TabsContent value="spending" className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-            <CashflowCard />
-            <CategorySpendCard />
+            <CashflowCard data={data} isLoading={isLoading} />
+            <CategorySpendCard data={data} isLoading={isLoading} />
           </TabsContent>
 
           <TabsContent value="accounts" className="grid gap-4 lg:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">

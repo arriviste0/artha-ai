@@ -11,23 +11,34 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts"
 
 const CHART_COLORS = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#7c3aed"]
 
-export function CategorySpendCard() {
-  const { data, isLoading } = useDashboard()
+import type { DashboardSummary } from "@/hooks/use-dashboard"
+
+export function CategorySpendCard({
+  data: externalData,
+  isLoading: externalLoading,
+}: {
+  data?: DashboardSummary
+  isLoading?: boolean
+} = {}) {
+  const fallback = useDashboard()
+  const data = externalData ?? fallback.data
+  const isLoading = externalLoading ?? fallback.isLoading
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
   if (isLoading) return <Skeleton className="h-72 rounded-xl" />
 
   const categories = data?.topCategories ?? []
   const totalExpenses = data?.currentMonth.expensesPaise ?? 0
+  const periodLabel = data?.period?.label ?? "This Month"
 
   if (categories.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Top Spending</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Top Spending ({periodLabel})</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No expenses recorded this month.</p>
+          <p className="text-sm text-muted-foreground">No expenses recorded for this period.</p>
         </CardContent>
       </Card>
     )
@@ -46,7 +57,7 @@ export function CategorySpendCard() {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Top Spending - This Month
+          Top Spending ({periodLabel})
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -23,8 +23,18 @@ function CustomTooltip({ active, payload }: TooltipProps) {
   )
 }
 
-export function CashflowCard() {
-  const { data, isLoading } = useDashboard()
+import type { DashboardSummary } from "@/hooks/use-dashboard"
+
+export function CashflowCard({
+  data: externalData,
+  isLoading: externalLoading,
+}: {
+  data?: DashboardSummary
+  isLoading?: boolean
+} = {}) {
+  const fallback = useDashboard()
+  const data = externalData ?? fallback.data
+  const isLoading = externalLoading ?? fallback.isLoading
 
   if (isLoading) return <Skeleton className="h-44 rounded-xl" />
 
@@ -37,17 +47,21 @@ export function CashflowCard() {
     ? Math.round(((curr.incomePaise - curr.expensesPaise) / curr.incomePaise) * 100)
     : 0
 
+  const periodLabel = data?.period?.label ?? "This Month"
+
   const chartData = [
-    { label: "Last mo. income",   value: last.incomePaise / 100,   fill: "#86efac" },
-    { label: "Last mo. expenses", value: last.expensesPaise / 100,  fill: "#fca5a5" },
-    { label: "This mo. income",   value: curr.incomePaise / 100,   fill: "#16a34a" },
-    { label: "This mo. expenses", value: curr.expensesPaise / 100,  fill: "#ef4444" },
+    { label: "Prior Inc",   value: last.incomePaise / 100,   fill: "#86efac" },
+    { label: "Prior Exp", value: last.expensesPaise / 100,  fill: "#fca5a5" },
+    { label: "Income",   value: curr.incomePaise / 100,   fill: "#16a34a" },
+    { label: "Expenses", value: curr.expensesPaise / 100,  fill: "#ef4444" },
   ]
 
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Monthly Cashflow</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">
+          Cashflow ({periodLabel})
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-3 gap-2 text-sm">
