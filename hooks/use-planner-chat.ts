@@ -1,5 +1,7 @@
+"use client"
+
 import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import type { ActionableChange, PlannerAdviceResponse } from "@/lib/ai/planner-advisor"
 
@@ -15,15 +17,31 @@ export interface PlannerChatMessage {
   createdAt: Date
 }
 
+export interface ConversationItem {
+  id: string
+  title: string
+  aiModel?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export function useApplyPlannerAction() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (action: ActionableChange): Promise<{ success: boolean; message: string }> => {
+    mutationFn: async ({
+      action,
+      messageId,
+      actionIndex,
+    }: {
+      action: ActionableChange
+      messageId?: string
+      actionIndex?: number
+    }): Promise<{ success: boolean; message: string }> => {
       const res = await fetch("/api/planner/apply-action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(action),
+        body: JSON.stringify({ action, messageId, actionIndex }),
       })
 
       if (!res.ok) {
@@ -49,20 +67,109 @@ export function useApplyPlannerAction() {
 
 export function usePlannerChat() {
   const [messages, setMessages] = useState<PlannerChatMessage[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [activeConversationTitle, setActiveConversationTitle] = useState<string | undefined>()
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+
+  const queryClient = useQueryClient()
   const applyActionMutation = useApplyPlannerAction()
 
+  // 1. Fetch conversations list
+  const { data: conversationsData, isLoading: isConversationsLoading } = useQuery<{
+    conversations: ConversationItem[]
+  }>({
+    queryKey: ["planner-conversations"],
+    queryFn: async () => {
+      const res = await fetch("/api/planner/conversations")
+      if (!res.ok) throw new Error("Failed to load chat history")
+      return res.json()
+    },
+  })
+
+  const conversations = conversationsData?.conversations ?? []
+
+  // 2. Load conversation by ID
+  async function loadConversation(id: string) {
+    if (activeConversationId === id) return
+    setIsLoadingMessages(true)
+    try {
+      const res = await fetch(`/api/planner/conversations/${id}`)
+      if (!res.ok) throw new Error("Failed to load conversation")
+      const data = await res.json()
+
+      setActiveConversationId(data.conversation.id)
+      setActiveConversationTitle(data.conversation.title)
+
+      const formattedMessages: PlannerChatMessage[] = data.messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        analysis: m.analysis,
+        actionableChanges: m.actionableChanges || [],
+        warnings: m.warnings || [],
+        quickReplies: m.quickReplies || [],
+        appliedActions: m.appliedActions || {},
+        createdAt: new Date(m.createdAt),
+      }))
+
+      setMessages(formattedMessages)
+    } catch (err) {
+      toast.error((err as Error).message || "Failed to load conversation")
+    } finally {
+      setIsLoadingMessages(false)
+    }
+  }
+
+  // 3. Start a fresh new chat
+  function startNewChat() {
+    setActiveConversationId(null)
+    setActiveConversationTitle(undefined)
+    setMessages([])
+  }
+
+  // 4. Delete conversation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/planner/conversations/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error("Failed to delete chat")
+      return res.json()
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["planner-conversations"] })
+      toast.success("Chat deleted")
+      if (activeConversationId === deletedId) {
+        startNewChat()
+      }
+    },
+    onError: (err: Error) => {
+      toast.error(err.message)
+    },
+  })
+
+  // 5. Send message
   const chatMutation = useMutation({
     mutationFn: async ({
       message,
+      conversationId,
       history,
     }: {
       message: string
+      conversationId?: string | null
       history: Array<{ role: "user" | "assistant"; content: string }>
-    }): Promise<PlannerAdviceResponse> => {
+    }): Promise<{
+      advice: PlannerAdviceResponse
+      conversationId: string
+      messageId: string
+      conversationTitle?: string
+    }> => {
       const res = await fetch("/api/planner/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({
+          message,
+          conversationId: conversationId || undefined,
+          history,
+        }),
       })
 
       if (!res.ok) {
@@ -70,8 +177,14 @@ export function usePlannerChat() {
         throw new Error(errData.error || "Failed to communicate with AI Copilot")
       }
 
-      const data = await res.json()
-      return data.advice
+      return res.json()
+    },
+    onSuccess: (data) => {
+      setActiveConversationId(data.conversationId)
+      if (data.conversationTitle) {
+        setActiveConversationTitle(data.conversationTitle)
+      }
+      queryClient.invalidateQueries({ queryKey: ["planner-conversations"] })
     },
   })
 
@@ -96,20 +209,20 @@ export function usePlannerChat() {
     }))
 
     try {
-      const advice = await chatMutation.mutateAsync({
+      const result = await chatMutation.mutateAsync({
         message: trimmed,
+        conversationId: activeConversationId,
         history: historyForApi.slice(-8),
       })
 
-      const assistantMsgId = `assistant-${Date.now()}`
       const assistantMsg: PlannerChatMessage = {
-        id: assistantMsgId,
+        id: result.messageId || `assistant-${Date.now()}`,
         role: "assistant",
-        content: advice.message,
-        analysis: advice.analysis,
-        actionableChanges: advice.actionableChanges,
-        warnings: advice.warnings,
-        quickReplies: advice.quickReplies,
+        content: result.advice.message,
+        analysis: result.advice.analysis,
+        actionableChanges: result.advice.actionableChanges,
+        warnings: result.advice.warnings,
+        quickReplies: result.advice.quickReplies,
         appliedActions: {},
         createdAt: new Date(),
       }
@@ -122,7 +235,11 @@ export function usePlannerChat() {
 
   async function applyAction(messageId: string, actionIndex: number, action: ActionableChange) {
     try {
-      await applyActionMutation.mutateAsync(action)
+      await applyActionMutation.mutateAsync({
+        action,
+        messageId,
+        actionIndex,
+      })
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg.id !== messageId) return msg
@@ -154,7 +271,16 @@ export function usePlannerChat() {
     sendMessage,
     applyAction,
     applyAllActions,
-    isLoading: chatMutation.isPending,
+    isLoading: chatMutation.isPending || isLoadingMessages,
     isApplying: applyActionMutation.isPending,
+    // Conversation history management
+    conversations,
+    isConversationsLoading,
+    activeConversationId,
+    activeConversationTitle,
+    loadConversation,
+    startNewChat,
+    deleteConversation: (id: string) => deleteMutation.mutate(id),
+    isDeletingChat: deleteMutation.isPending,
   }
 }

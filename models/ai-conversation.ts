@@ -26,11 +26,17 @@ export interface IAIMessage extends Document {
   userId: mongoose.Types.ObjectId
   role: "user" | "assistant" | "tool"
   content: string
+  analysis?: string
+  actionableChanges?: any[]
+  warnings?: string[]
+  quickReplies?: string[]
+  appliedActions?: Record<string, boolean>
   toolName?: string
   toolCallId?: string
   inputTokens?: number
   outputTokens?: number
   createdAt: Date
+  updatedAt: Date
 }
 
 const AIMessageSchema = new Schema<IAIMessage>(
@@ -44,6 +50,11 @@ const AIMessageSchema = new Schema<IAIMessage>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     role: { type: String, enum: ["user", "assistant", "tool"], required: true },
     content: { type: String, required: true },
+    analysis: { type: String },
+    actionableChanges: { type: [Schema.Types.Mixed], default: [] },
+    warnings: { type: [String], default: [] },
+    quickReplies: { type: [String], default: [] },
+    appliedActions: { type: Schema.Types.Mixed, default: {} },
     toolName: { type: String },
     toolCallId: { type: String },
     inputTokens: { type: Number },

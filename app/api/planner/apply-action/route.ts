@@ -8,9 +8,15 @@ import { actionableChangeSchema } from "@/lib/ai/planner-advisor"
 import { paiseToRupees } from "@/lib/money"
 import mongoose from "mongoose"
 
+import { AIMessage } from "@/models/ai-conversation"
+
 export const POST = withAuth(async (req: NextRequest, { userId }) => {
-  const body: unknown = await req.json()
-  const parsed = actionableChangeSchema.safeParse(body)
+  const body: any = await req.json().catch(() => ({}))
+  const actionPayload = body.action || body
+  const messageId = body.messageId
+  const actionIndex = body.actionIndex
+
+  const parsed = actionableChangeSchema.safeParse(actionPayload)
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid action payload: " + parsed.error.issues[0]?.message },
@@ -20,6 +26,15 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
 
   await connectDB()
   const action = parsed.data
+
+  const markMessageApplied = async () => {
+    if (messageId && typeof actionIndex === "number" && mongoose.Types.ObjectId.isValid(messageId)) {
+      await AIMessage.findOneAndUpdate(
+        { _id: new mongoose.Types.ObjectId(messageId), userId: new mongoose.Types.ObjectId(userId) },
+        { $set: { [`appliedActions.${actionIndex}`]: true } }
+      )
+    }
+  }
 
   try {
     switch (action.type) {
@@ -47,6 +62,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
           before: { limitPaise: prev.limitPaise },
           after: { limitPaise: action.suggestedLimitPaise },
         })
+
+        await markMessageApplied()
 
         return NextResponse.json({
           success: true,
@@ -80,6 +97,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
           },
         })
 
+        await markMessageApplied()
+
         return NextResponse.json({
           success: true,
           message: `Created budget "${action.name}" of ₹${paiseToRupees(action.limitPaise).toLocaleString("en-IN")}`,
@@ -110,6 +129,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
             targetPaise: action.targetPaise,
           },
         })
+
+        await markMessageApplied()
 
         return NextResponse.json({
           success: true,
@@ -153,6 +174,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
           },
           after: updateFields,
         })
+
+        await markMessageApplied()
 
         return NextResponse.json({
           success: true,
