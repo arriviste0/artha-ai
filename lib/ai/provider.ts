@@ -37,18 +37,25 @@ export function getAIAvailability() {
   }
 }
 
+function cleanConfig(val?: string): string {
+  if (!val) return ""
+  return val.split("#", 1)[0].trim()
+}
+
 export function isAIProviderAvailable(provider: AIProviderName): boolean {
-  if (provider === "groq") return !!process.env.GROQ_API_KEY
+  if (provider === "groq") return !!cleanConfig(process.env.GROQ_API_KEY)
   return true
 }
 
 async function groqGenerate({ prompt, json }: GenerateOpts): Promise<string> {
-  const key = process.env.GROQ_API_KEY
+  const key = cleanConfig(process.env.GROQ_API_KEY)
   if (!key) throw new Error("GROQ_API_KEY not set")
   const groq = new Groq({ apiKey: key })
 
+  const model = cleanConfig(process.env.GROQ_MODEL) || "openai/gpt-oss-120b"
+
   const completion = await groq.chat.completions.create({
-    model: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+    model,
     messages: [{ role: "user", content: prompt }],
     ...(json ? { response_format: { type: "json_object" } } : {}),
   })
