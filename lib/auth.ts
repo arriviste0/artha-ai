@@ -4,12 +4,20 @@ import Google from "next-auth/providers/google"
 import bcrypt from "bcryptjs"
 import { connectDB } from "@/lib/db"
 import User from "@/models/user"
+import SyncConnection from "@/models/sync-connection"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          access_type: "offline",
+          prompt: "consent",
+        },
+      },
     }),
     Credentials({
       credentials: {
@@ -40,14 +48,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account }) {
       if (account?.provider === "google") {
         await connectDB()
-        const existing = await User.findOne({ email: user.email!.toLowerCase() })
-        if (!existing) {
-          await User.create({
+        let dbUser = await User.findOne({ email: user.email!.toLowerCase() })
+        if (!dbUser) {
+          dbUser = await User.create({
             email: user.email!.toLowerCase(),
             name: user.name ?? undefined,
             image: user.image ?? undefined,
             onboardingCompleted: false,
           })
+        }
+
+        if (account.access_token) {
+          const hasGmail = Boolean(account.scope && account.scope.includes("gmail"))
+          const tokenExpiresAt = account.expires_at ? new Date(account.expires_at * 1000) : undefined
+          await SyncConnection.findOneAndUpdate(
+            { userId: dbUser._id, provider: "gmail" },
+            {
+              $set: {
+                accessToken: account.access_token,
+                ...(account.refresh_token ? { refreshToken: account.refresh_token } : {}),
+                tokenExpiresAt,
+                hasGmailScope: hasGmail,
+                email: user.email!.toLowerCase(),
+              },
+            },
+            { upsert: true }
+          )
         }
       }
       return true

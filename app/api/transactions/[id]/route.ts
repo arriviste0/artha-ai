@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import mongoose from "mongoose"
 import { withAuth } from "@/lib/with-auth"
 import { connectDB } from "@/lib/db"
 import Transaction from "@/models/transaction"
 import Account from "@/models/account"
+import Budget from "@/models/budget"
 import AuditLog from "@/models/audit-log"
 import { updateTransactionSchema } from "@/lib/validators/transaction"
 
@@ -52,9 +54,27 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
     })
   }
 
+  const updateData: Record<string, unknown> = { ...parsed.data }
+  if (parsed.data.occurredAt) {
+    updateData.occurredAt = new Date(parsed.data.occurredAt)
+  }
+  if (parsed.data.budgetId && mongoose.Types.ObjectId.isValid(parsed.data.budgetId)) {
+    updateData.budgetId = new mongoose.Types.ObjectId(parsed.data.budgetId)
+  } else if (parsed.data.budgetId === "") {
+    updateData.budgetId = null
+  } else if (!parsed.data.budgetId && parsed.data.category) {
+    const matching = await Budget.findOne({ userId, category: parsed.data.category })
+    if (matching) {
+      updateData.budgetId = matching._id
+    }
+  }
+  if (parsed.data.goalId === "") {
+    updateData.goalId = null
+  }
+
   const updated = await Transaction.findOneAndUpdate(
     { _id: params?.id, userId },
-    { $set: { ...parsed.data, ...(parsed.data.occurredAt ? { occurredAt: new Date(parsed.data.occurredAt) } : {}) } },
+    { $set: updateData },
     { new: true }
   ).lean()
 

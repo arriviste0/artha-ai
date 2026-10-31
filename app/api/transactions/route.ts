@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/with-auth"
 import { connectDB } from "@/lib/db"
 import Transaction from "@/models/transaction"
 import Account from "@/models/account"
+import Budget from "@/models/budget"
 import AuditLog from "@/models/audit-log"
 import { createTransactionSchema, transactionFiltersSchema } from "@/lib/validators/transaction"
 
@@ -96,8 +97,22 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   const account = await Account.findOne({ _id: parsed.data.accountId, userId })
   if (!account) return NextResponse.json({ error: "Account not found" }, { status: 404 })
 
+  let budgetId =
+    parsed.data.budgetId && mongoose.Types.ObjectId.isValid(parsed.data.budgetId)
+      ? new mongoose.Types.ObjectId(parsed.data.budgetId)
+      : undefined
+
+  if (!budgetId && parsed.data.type === "debit") {
+    const matchingBudget = await Budget.findOne({ userId, category: parsed.data.category })
+    if (matchingBudget) {
+      budgetId = matchingBudget._id as mongoose.Types.ObjectId
+    }
+  }
+
   const txn = await Transaction.create({
     ...parsed.data,
+    budgetId,
+    goalId: parsed.data.goalId ? parsed.data.goalId : undefined,
     userId,
     occurredAt: new Date(parsed.data.occurredAt),
   })

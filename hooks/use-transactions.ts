@@ -17,6 +17,7 @@ export interface TransactionDTO {
   tags: string[]
   isRecurring: boolean
   needsReview: boolean
+  budgetId?: string
 }
 
 export interface TransactionFiltersInput {
@@ -99,6 +100,7 @@ export function useDeleteTransaction() {
       qc.invalidateQueries({ queryKey: ["transactions"] })
       qc.invalidateQueries({ queryKey: ["accounts"] })
       qc.invalidateQueries({ queryKey: ["dashboard"] })
+      qc.invalidateQueries({ queryKey: ["budgets"] })
     },
   })
 }

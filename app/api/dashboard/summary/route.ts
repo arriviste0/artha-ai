@@ -191,13 +191,21 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
   // Budget Adherence for period
   const budgetStatuses = await Promise.all(
     budgets.map(async (b) => {
+      const budgetOid = new mongoose.Types.ObjectId(b._id.toString())
       const agg = await Transaction.aggregate([
         {
           $match: {
             userId: userOid,
-            category: b.category,
             type: "debit",
-            occurredAt: { $gte: startDate, $lte: endDate },
+            $or: [
+              { budgetId: budgetOid },
+              { budgetId: b._id.toString() },
+              {
+                category: b.category,
+                budgetId: { $in: [null, undefined, ""] },
+                occurredAt: { $gte: startDate, $lte: endDate },
+              },
+            ],
           },
         },
         { $group: { _id: null, total: { $sum: "$amountPaise" } } },

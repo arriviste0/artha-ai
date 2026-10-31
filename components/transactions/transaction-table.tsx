@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal, Loader2 } from "lucide-react"
+import { useMemo, useState } from "react"
+import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal, Loader2, PiggyBank } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatINR } from "@/lib/money"
 import { useAccounts } from "@/hooks/use-accounts"
+import { useBudgets } from "@/hooks/use-budgets"
 import { useDeleteTransaction, useUpdateTransaction, type TransactionDTO } from "@/hooks/use-transactions"
 import { TransactionForm } from "./transaction-form"
 import {
@@ -39,6 +40,9 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
   const del = useDeleteTransaction()
   const update = useUpdateTransaction()
   const { data: accounts = [] } = useAccounts()
+  const { data: budgets = [] } = useBudgets()
+  const budgetMap = useMemo(() => new Map(budgets.map((b) => [b._id, b])), [budgets])
+  const budgetCategoryMap = useMemo(() => new Map(budgets.map((b) => [b.category, b])), [budgets])
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editingTxn, setEditingTxn] = useState<TransactionDTO | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -207,9 +211,23 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <Badge variant="outline" className="text-xs font-normal">
-                      {txn.category}
-                    </Badge>
+                    <div className="flex flex-col gap-0.5">
+                      <Badge variant="outline" className="text-xs font-normal w-fit">
+                        {txn.category}
+                      </Badge>
+                      {(() => {
+                        const matchedBudget = (txn.budgetId ? budgetMap.get(txn.budgetId) : null) ?? budgetCategoryMap.get(txn.category)
+                        return matchedBudget ? (
+                          <span
+                            className="text-[11px] text-muted-foreground flex items-center gap-1 truncate max-w-[150px]"
+                            title={`Budget: ${matchedBudget.name}`}
+                          >
+                            <PiggyBank className="h-3 w-3 text-primary/70 shrink-0" />
+                            <span className="truncate">{matchedBudget.name}</span>
+                          </span>
+                        ) : null
+                      })()}
+                    </div>
                   </td>
                   <td className={cn(
                     "px-2 py-3 text-right font-medium tabular-nums whitespace-nowrap sm:px-4",
@@ -311,6 +329,7 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
           {editingTxn && (
             <TransactionForm
               accounts={accounts}
+              budgets={budgets}
               defaultValues={editingTxn}
               onSubmit={handleUpdate}
               onCancel={() => setEditingTxn(null)}

@@ -11,6 +11,7 @@ export const createTransactionSchema = z.object({
   subcategory: z.string().max(100).optional(),
   tags: z.array(z.string()).default([]),
   goalId: z.string().optional(),
+  budgetId: z.string().optional(),
 })
 
 export const updateTransactionSchema = createTransactionSchema

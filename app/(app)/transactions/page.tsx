@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Plus, ArrowLeftRight, ArrowDownRight, ArrowUpRight, Wallet } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Plus, ArrowLeftRight, ArrowDownRight, ArrowUpRight, Wallet, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -9,8 +9,10 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { TransactionTable } from "@/components/transactions/transaction-table"
 import { TransactionFilters } from "@/components/transactions/transaction-filters"
 import { TransactionForm } from "@/components/transactions/transaction-form"
+import { SyncTransactionsDialog } from "@/components/transactions/sync-transactions-dialog"
 import { useTransactions, useCreateTransaction, type TransactionFiltersInput } from "@/hooks/use-transactions"
 import { useAccounts } from "@/hooks/use-accounts"
+import { useBudgets } from "@/hooks/use-budgets"
 import { formatINR } from "@/lib/money"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
@@ -21,14 +23,30 @@ const DEFAULT_FILTERS: TransactionFiltersInput = { page: 1, limit: 50 }
 export default function TransactionsPage() {
   const [filters, setFilters] = useState<TransactionFiltersInput>(DEFAULT_FILTERS)
   const [addOpen, setAddOpen] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
 
   const { data, isLoading } = useTransactions(filters)
   const { data: accounts = [] } = useAccounts()
+  const { data: budgets = [] } = useBudgets()
   const create = useCreateTransaction()
 
   const transactions = data?.transactions ?? []
   const total = data?.total ?? 0
   const stats = data?.stats
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search)
+      if (sp.get("sync") === "gmail-connected") {
+        setSyncOpen(true)
+        toast.success("Gmail connected successfully! Ready to sync.")
+        window.history.replaceState({}, "", window.location.pathname)
+      } else if (sp.get("syncError")) {
+        toast.error(sp.get("syncError"))
+        window.history.replaceState({}, "", window.location.pathname)
+      }
+    }
+  }, [])
 
   async function handleCreate(d: CreateTransactionInput) {
     await create.mutateAsync(d)
@@ -45,9 +63,14 @@ export default function TransactionsPage() {
             {total > 0 ? `${total} transactions recorded` : "Every rupee in and out"}
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} disabled={accounts.length === 0}>
-          <Plus className="h-4 w-4 mr-2" /> Add transaction
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setSyncOpen(true)}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Sync Transactions
+          </Button>
+          <Button onClick={() => setAddOpen(true)} disabled={accounts.length === 0}>
+            <Plus className="h-4 w-4 mr-2" /> Add transaction
+          </Button>
+        </div>
       </div>
 
       {/* Net Spending Summary Bar */}
@@ -173,11 +196,14 @@ export default function TransactionsPage() {
           </DialogHeader>
           <TransactionForm
             accounts={accounts}
+            budgets={budgets}
             onSubmit={handleCreate}
             onCancel={() => setAddOpen(false)}
           />
         </DialogContent>
       </Dialog>
+
+      <SyncTransactionsDialog open={syncOpen} onOpenChange={setSyncOpen} />
     </div>
   )
 }

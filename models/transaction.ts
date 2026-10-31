@@ -1,6 +1,12 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose"
 
-export type TransactionSource = "manual" | "statement_pdf" | "statement_csv" | "bank_api"
+export type TransactionSource =
+  | "manual"
+  | "statement_pdf"
+  | "statement_csv"
+  | "bank_api"
+  | "email_sync"
+  | "sms_sync"
 
 export interface ITransaction extends Document {
   userId: mongoose.Types.ObjectId
@@ -18,11 +24,14 @@ export interface ITransaction extends Document {
   recurringGroupId?: string
   source: TransactionSource
   sourceFileId?: string
+  referenceNumber?: string
+  accountNumberMasked?: string
   rawData?: Record<string, unknown>
   needsReview: boolean
   aiConfidence?: number
   splitOf?: mongoose.Types.ObjectId
   goalId?: mongoose.Types.ObjectId
+  budgetId?: mongoose.Types.ObjectId
   createdAt: Date
   updatedAt: Date
 }
@@ -48,21 +57,26 @@ const TransactionSchema = new Schema<ITransaction>(
     recurringGroupId: { type: String, index: true },
     source: {
       type: String,
-      enum: ["manual", "statement_pdf", "statement_csv", "bank_api"],
+      enum: ["manual", "statement_pdf", "statement_csv", "bank_api", "email_sync", "sms_sync"],
       default: "manual",
     },
     sourceFileId: { type: String },
+    referenceNumber: { type: String, trim: true },
+    accountNumberMasked: { type: String, trim: true },
     rawData: { type: Schema.Types.Mixed },
     needsReview: { type: Boolean, default: false },
     aiConfidence: { type: Number, min: 0, max: 1 },
     splitOf: { type: Schema.Types.ObjectId, ref: "Transaction" },
     goalId: { type: Schema.Types.ObjectId, ref: "Goal" },
+    budgetId: { type: Schema.Types.ObjectId, ref: "Budget" },
   },
   { timestamps: true }
 )
 
 TransactionSchema.index({ userId: 1, occurredAt: -1 })
 TransactionSchema.index({ userId: 1, category: 1 })
+TransactionSchema.index({ userId: 1, budgetId: 1 })
+TransactionSchema.index({ userId: 1, referenceNumber: 1 })
 TransactionSchema.index({ userId: 1, recurringGroupId: 1 })
 
 const Transaction: Model<ITransaction> =
