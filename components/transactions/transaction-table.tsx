@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal, Loader2, PiggyBank } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { ArrowUpRight, ArrowDownLeft, Trash2, AlertCircle, ChevronLeft, ChevronRight, Pencil, MoreHorizontal, Loader2, PiggyBank, CheckCheck, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function TransactionTable({ transactions, total, page, limit, isLoading, onPageChange }: Props) {
+  const qc = useQueryClient()
   const del = useDeleteTransaction()
   const update = useUpdateTransaction()
   const { data: accounts = [] } = useAccounts()
@@ -48,7 +50,46 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
   const [editingTxn, setEditingTxn] = useState<TransactionDTO | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false)
   const totalPages = Math.ceil(total / limit)
+
+  const unconfirmedTxns = useMemo(() => {
+    return transactions.filter(
+      (t) => !t.categoryConfirmedByUser && (t.merchant || t.description)
+    )
+  }, [transactions])
+
+  const selectedUnconfirmedCount = useMemo(() => {
+    return transactions.filter(
+      (t) =>
+        selectedIds.has(t._id) &&
+        !t.categoryConfirmedByUser &&
+        (t.merchant || t.description)
+    ).length
+  }, [transactions, selectedIds])
+
+  async function handleConfirmAll(transactionIds?: string[]) {
+    setIsConfirmingAll(true)
+    try {
+      const res = await fetch("/api/payees/confirm-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionIds }),
+      })
+      if (!res.ok) throw new Error("Failed to confirm")
+      const data = (await res.json()) as { confirmedCount?: number }
+      toast.success(
+        `Confirmed ${data.confirmedCount ?? "all"} transaction categories!`
+      )
+      qc.invalidateQueries({ queryKey: ["transactions"] })
+      qc.invalidateQueries({ queryKey: ["dashboard-summary"] })
+      qc.invalidateQueries({ queryKey: ["budgets"] })
+    } catch {
+      toast.error("Failed to confirm transaction categories")
+    } finally {
+      setIsConfirmingAll(false)
+    }
+  }
 
   const isAllSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
@@ -120,18 +161,62 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
 
   return (
     <div className="space-y-4">
+      {/* Banner for pending categorization suggestions */}
+      {unconfirmedTxns.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg text-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              <strong>{unconfirmedTxns.length} transaction{unconfirmedTxns.length > 1 ? "s" : ""}</strong> have categorization suggestions ready to be confirmed and learned.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-7 px-3 text-xs gap-1.5 font-medium shrink-0 shadow-sm"
+            disabled={isConfirmingAll}
+            onClick={() => handleConfirmAll(unconfirmedTxns.map((t) => t._id))}
+          >
+            {isConfirmingAll ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <CheckCheck className="h-3.5 w-3.5" />
+            )}
+            Confirm All ({unconfirmedTxns.length})
+          </Button>
+        </div>
+      )}
+
       {selectedIds.size > 0 && (
         <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border">
           <span className="text-sm font-medium">{selectedIds.size} transaction{selectedIds.size > 1 ? 's' : ''} selected</span>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleBulkDelete}
-            disabled={isBulkDeleting}
-          >
-            {isBulkDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-            Delete Selected
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedUnconfirmedCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleConfirmAll(Array.from(selectedIds))}
+                disabled={isConfirmingAll}
+                className="gap-1.5"
+              >
+                {isConfirmingAll ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-4 w-4 text-primary" />
+                )}
+                Confirm Selected ({selectedUnconfirmedCount})
+              </Button>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+            >
+              {isBulkDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Selected
+            </Button>
+          </div>
         </div>
       )}
 
@@ -208,6 +293,8 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                         <PayeeConfirmChip
                           transaction={txn}
                           onOpenEdit={() => setEditingTxn(txn)}
+                          onConfirmed={() => qc.invalidateQueries({ queryKey: ["transactions"] })}
+                          onConfirmAll={() => handleConfirmAll()}
                         />
                       </div>
                       {txn.needsReview && (

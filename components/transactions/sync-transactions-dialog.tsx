@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Shield,
   Unlink,
+  CheckCheck,
 } from "lucide-react"
 import {
   Dialog,
@@ -78,6 +79,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
   const qc = useQueryClient()
   const [step, setStep] = useState<SyncStep>("mail_idle")
   const [retryCount, setRetryCount] = useState(0)
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false)
 
   // Date selection (default: 90 days ago)
   const defaultDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
@@ -755,9 +757,53 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                 </div>
               )}
 
-              <Button className="w-full" onClick={() => onOpenChange(false)}>
-                Done
-              </Button>
+              {syncResult.transactions && syncResult.transactions.length > 0 ? (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    className="flex-1 gap-1.5"
+                    disabled={isBulkConfirming}
+                    onClick={async () => {
+                      setIsBulkConfirming(true)
+                      try {
+                        const res = await fetch("/api/payees/confirm-all", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            transactionIds: syncResult.transactions?.map((t) => t._id),
+                          }),
+                        })
+                        if (!res.ok) throw new Error("Failed to confirm")
+                        const data = (await res.json()) as { confirmedCount?: number }
+                        toast.success(
+                          `Confirmed all ${data.confirmedCount || syncResult.transactions?.length} transaction categories!`
+                        )
+                        qc.invalidateQueries({ queryKey: ["transactions"] })
+                        qc.invalidateQueries({ queryKey: ["dashboard-summary"] })
+                        qc.invalidateQueries({ queryKey: ["budgets"] })
+                        onOpenChange(false)
+                      } catch {
+                        toast.error("Failed to confirm categories")
+                      } finally {
+                        setIsBulkConfirming(false)
+                      }
+                    }}
+                  >
+                    {isBulkConfirming ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                    ) : (
+                      <CheckCheck className="h-4 w-4 mr-1.5" />
+                    )}
+                    Confirm All Categories ({syncResult.transactions.length})
+                  </Button>
+                  <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    Done
+                  </Button>
+                </div>
+              ) : (
+                <Button className="w-full" onClick={() => onOpenChange(false)}>
+                  Done
+                </Button>
+              )}
             </div>
           )}
 

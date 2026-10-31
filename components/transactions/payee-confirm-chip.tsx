@@ -10,14 +10,17 @@ interface PayeeConfirmChipProps {
   transaction: TransactionDTO
   onOpenEdit?: () => void
   onConfirmed?: () => void
+  onConfirmAll?: () => void
 }
 
 export function PayeeConfirmChip({
   transaction,
   onOpenEdit,
   onConfirmed,
+  onConfirmAll,
 }: PayeeConfirmChipProps) {
   const [isConfirming, setIsConfirming] = useState(false)
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
 
   // Only show if not yet confirmed by user and has a recognizable payee/merchant
@@ -88,10 +91,40 @@ export function PayeeConfirmChip({
     }
   }
 
+  async function handleConfirmAll() {
+    setIsConfirmingAll(true)
+    try {
+      const res = await fetch("/api/payees/confirm-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed to confirm all")
+      }
+
+      const data = (await res.json()) as { confirmedCount?: number }
+      setIsDismissed(true)
+      if (onConfirmAll) {
+        onConfirmAll()
+      } else if (onConfirmed) {
+        onConfirmed()
+      }
+
+      toast.success(
+        `All transaction categories confirmed! (${data.confirmedCount || "All"} updated)`
+      )
+    } catch {
+      toast.error("Could not confirm all categories")
+    } finally {
+      setIsConfirmingAll(false)
+    }
+  }
+
   return (
     <div className="inline-flex items-center gap-1.5 px-2 py-1 mt-1 text-xs rounded-md bg-primary/10 border border-primary/20 text-foreground transition-all">
       <Sparkles className="h-3 w-3 text-primary shrink-0" />
-      <span className="truncate max-w-[220px] sm:max-w-xs text-muted-foreground">
+      <span className="truncate max-w-[200px] sm:max-w-xs text-muted-foreground">
         Categorised as <strong className="text-foreground font-medium">{transaction.category}</strong>. Always do this for <span className="font-medium text-foreground truncate">{payeeDisplayName}</span>?
       </span>
       <div className="inline-flex items-center gap-1 ml-1 shrink-0">
@@ -100,7 +133,7 @@ export function PayeeConfirmChip({
           size="sm"
           variant="default"
           className="h-5 px-2 text-[10px] gap-1 font-medium"
-          disabled={isConfirming}
+          disabled={isConfirming || isConfirmingAll}
           onClick={handleConfirm}
         >
           {isConfirming ? (
@@ -109,6 +142,22 @@ export function PayeeConfirmChip({
             <Check className="h-2.5 w-2.5" />
           )}
           Confirm
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-5 px-2 text-[10px] gap-1 font-medium bg-primary/20 hover:bg-primary/30 text-foreground"
+          disabled={isConfirming || isConfirmingAll}
+          onClick={handleConfirmAll}
+          title="Confirm all pending transaction categories"
+        >
+          {isConfirmingAll ? (
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          ) : (
+            <Check className="h-2.5 w-2.5 text-primary" />
+          )}
+          Confirm All
         </Button>
         <Button
           type="button"
