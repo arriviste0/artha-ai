@@ -165,6 +165,8 @@ export async function POST(req: NextRequest) {
       category: item.category,
       referenceNumber: item.referenceNumber,
       accountNumberMasked: item.accountNumberMasked,
+      payeeKey: item.payeeKey,
+      payeeType: item.payeeType,
       source: "sms_sync",
       needsReview: false,
     })

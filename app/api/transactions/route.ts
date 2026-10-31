@@ -7,6 +7,7 @@ import Account from "@/models/account"
 import Budget from "@/models/budget"
 import AuditLog from "@/models/audit-log"
 import { createTransactionSchema, transactionFiltersSchema } from "@/lib/validators/transaction"
+import { buildPayeeKey, detectPayeeType } from "@/lib/categorization/payee-detector"
 
 export const GET = withAuth(async (req: NextRequest, { userId }) => {
   const sp = Object.fromEntries(req.nextUrl.searchParams)
@@ -109,8 +110,22 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     }
   }
 
+  const payeeKey =
+    parsed.data.payeeKey ||
+    buildPayeeKey({
+      payeeName: parsed.data.merchant || parsed.data.description,
+      rawText: parsed.data.description,
+    })
+  const detection = detectPayeeType({
+    payeeName: parsed.data.merchant || parsed.data.description,
+    rawText: parsed.data.description,
+  })
+
   const txn = await Transaction.create({
     ...parsed.data,
+    payeeKey,
+    payeeType: detection.payee_type,
+    categoryConfirmedByUser: true,
     budgetId,
     goalId: parsed.data.goalId ? parsed.data.goalId : undefined,
     userId,

@@ -26,6 +26,9 @@ export interface ITransaction extends Document {
   sourceFileId?: string
   referenceNumber?: string
   accountNumberMasked?: string
+  payeeKey?: string
+  payeeType?: "business" | "person" | "unknown"
+  categoryConfirmedByUser?: boolean
   rawData?: Record<string, unknown>
   needsReview: boolean
   aiConfidence?: number
@@ -63,6 +66,9 @@ const TransactionSchema = new Schema<ITransaction>(
     sourceFileId: { type: String },
     referenceNumber: { type: String, trim: true },
     accountNumberMasked: { type: String, trim: true },
+    payeeKey: { type: String, trim: true, index: true },
+    payeeType: { type: String, enum: ["business", "person", "unknown"] },
+    categoryConfirmedByUser: { type: Boolean, default: false },
     rawData: { type: Schema.Types.Mixed },
     needsReview: { type: Boolean, default: false },
     aiConfidence: { type: Number, min: 0, max: 1 },
@@ -78,6 +84,7 @@ TransactionSchema.index({ userId: 1, category: 1 })
 TransactionSchema.index({ userId: 1, budgetId: 1 })
 TransactionSchema.index({ userId: 1, referenceNumber: 1 })
 TransactionSchema.index({ userId: 1, recurringGroupId: 1 })
+TransactionSchema.index({ userId: 1, payeeKey: 1 })
 
 const Transaction: Model<ITransaction> =
   (mongoose.models.Transaction as Model<ITransaction>) ??

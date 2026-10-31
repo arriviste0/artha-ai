@@ -27,6 +27,10 @@ export const BANK_CONFIGS: BankSenderConfig[] = [
       "alert@hdfcbank.net",
       "hdfcbankalerts@hdfcbank.net",
       "alerts@hdfcbank.com",
+      "instaalerts@hdfcbank.com",
+      "hdfcbankalerts@hdfcbank.com",
+      "alerts@hdfcbank.in",
+      "alerts@hdfc.bank.in",
     ],
     smsHeaders: ["HDFCBK", "HDFCBN", "HDFCAL", "HDFCCC", "HDFCTx", "HDFCSM"],
   },
@@ -142,18 +146,23 @@ export const TRANSACTION_SEARCH_KEYWORDS = [
   '"account ending"',
   '"VPA"',
   '"UPI Ref"',
+  '"InstaAlerts"',
+  '"transaction reference"',
 ]
 
 /**
  * Build Gmail search query string for bank alert emails.
  * Matches known bank senders OR general Indian bank transaction keywords.
+ * Subtracts a 2-day buffer so that timezone variations and boundary hours
+ * on the start date are never missed. Deduplication prevents duplicates.
  */
 export function buildGmailQuery(fromDate: Date, senders: string[] = getAllBankEmailSenders()): string {
   const fromStr = senders.map((s) => `from:${s}`).join(" OR ")
   const keywordsStr = TRANSACTION_SEARCH_KEYWORDS.join(" OR ")
-  const year = fromDate.getFullYear()
-  const month = String(fromDate.getMonth() + 1).padStart(2, "0")
-  const day = String(fromDate.getDate()).padStart(2, "0")
+  const bufferedDate = new Date(fromDate.getTime() - 2 * 24 * 60 * 60 * 1000)
+  const year = bufferedDate.getFullYear()
+  const month = String(bufferedDate.getMonth() + 1).padStart(2, "0")
+  const day = String(bufferedDate.getDate()).padStart(2, "0")
   const afterStr = `after:${year}/${month}/${day}`
 
   return `(${fromStr} OR (${keywordsStr})) ${afterStr}`

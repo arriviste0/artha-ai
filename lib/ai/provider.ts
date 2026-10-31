@@ -1,7 +1,9 @@
 import Groq from "groq-sdk"
 
-interface GenerateOpts {
+export interface GenerateOpts {
   prompt: string
+  systemPrompt?: string
+  temperature?: number
   json: boolean
   provider?: AIProviderName
 }
@@ -47,32 +49,46 @@ export function isAIProviderAvailable(provider: AIProviderName): boolean {
   return true
 }
 
-async function groqGenerate({ prompt, json }: GenerateOpts): Promise<string> {
+async function groqGenerate(opts: GenerateOpts): Promise<string> {
   const key = cleanConfig(process.env.GROQ_API_KEY)
   if (!key) throw new Error("GROQ_API_KEY not set")
   const groq = new Groq({ apiKey: key })
 
   const model = cleanConfig(process.env.GROQ_MODEL) || "openai/gpt-oss-120b"
 
+  const messages: Array<{ role: "system" | "user"; content: string }> = []
+  if (opts.systemPrompt) {
+    messages.push({ role: "system", content: opts.systemPrompt })
+  }
+  messages.push({ role: "user", content: opts.prompt })
+
   const completion = await groq.chat.completions.create({
     model,
-    messages: [{ role: "user", content: prompt }],
-    ...(json ? { response_format: { type: "json_object" } } : {}),
+    messages,
+    temperature: opts.temperature ?? 0,
+    ...(opts.json ? { response_format: { type: "json_object" } } : {}),
   })
 
   return completion.choices[0]?.message?.content ?? ""
 }
 
-async function ollamaGenerate({ prompt, json }: GenerateOpts): Promise<string> {
+async function ollamaGenerate(opts: GenerateOpts): Promise<string> {
   const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"
   const model = process.env.OLLAMA_MODEL ?? "qwen2.5-coder:7b"
+  const messages: Array<{ role: "system" | "user"; content: string }> = []
+  if (opts.systemPrompt) {
+    messages.push({ role: "system", content: opts.systemPrompt })
+  }
+  messages.push({ role: "user", content: opts.prompt })
+
   const res = await fetch(`${base}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
-      messages: [{ role: "user", content: prompt }],
-      ...(json ? { format: "json" } : {}),
+      messages,
+      options: opts.temperature !== undefined ? { temperature: opts.temperature } : undefined,
+      ...(opts.json ? { format: "json" } : {}),
       stream: false,
     }),
   })

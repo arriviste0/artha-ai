@@ -19,26 +19,9 @@ import type { AccountDTO } from "@/hooks/use-accounts"
 import type { TransactionDTO } from "@/hooks/use-transactions"
 import { useBudgets, type BudgetDTO } from "@/hooks/use-budgets"
 import { formatINR } from "@/lib/money"
+import { ALLOWED_CATEGORIES } from "@/lib/categorization/categories"
 
-const CATEGORIES = [
-  "Food & Dining",
-  "Rent / Housing",
-  "Transport",
-  "Utilities",
-  "Healthcare",
-  "Entertainment",
-  "Shopping",
-  "Education",
-  "Insurance",
-  "Investments",
-  "EMI / Loans",
-  "Personal Care",
-  "Salary",
-  "Freelance Income",
-  "Business Income",
-  "Transfer",
-  "Other",
-]
+const CATEGORIES = ALLOWED_CATEGORIES
 
 interface Props {
   accounts: AccountDTO[]
@@ -291,6 +274,21 @@ export function TransactionForm({
           />
         </div>
       </div>
+
+      {defaultValues && (
+        <div className="flex items-center space-x-2 pt-1">
+          <input
+            type="checkbox"
+            id="applyToPast"
+            defaultChecked={true}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            {...register("applyToPast")}
+          />
+          <Label htmlFor="applyToPast" className="text-xs text-muted-foreground font-normal cursor-pointer">
+            Apply to past transactions from this payee too (learn rule)
+          </Label>
+        </div>
+      )}
 
       <div className="flex gap-3 pt-2">
         <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>

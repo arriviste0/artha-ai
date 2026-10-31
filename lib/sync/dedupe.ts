@@ -21,15 +21,18 @@ export async function deduplicateTransactions(
     return { newTransactions: [], duplicateCount: 0 }
   }
 
-  const userOid = new mongoose.Types.ObjectId(userId)
+  const isConnected = mongoose.connection.readyState === 1
+  const userOid = mongoose.isValidObjectId(userId)
+    ? new mongoose.Types.ObjectId(userId)
+    : undefined
 
   // 1. Gather all reference numbers from incoming items to batch-check DB
   const refNumbers = incoming
-    .map((t) => t.referenceNumber)
-    .filter((ref): ref is string => Boolean(ref && ref.trim()))
+    .map((t) => t.referenceNumber?.trim())
+    .filter((ref): ref is string => Boolean(ref && ref.length > 0))
 
   let existingRefNumbers = new Set<string>()
-  if (refNumbers.length > 0) {
+  if (isConnected && userOid && refNumbers.length > 0) {
     const existingWithRefs = await Transaction.find({
       userId: userOid,
       referenceNumber: { $in: refNumbers },
@@ -39,7 +42,7 @@ export async function deduplicateTransactions(
 
     existingRefNumbers = new Set(
       existingWithRefs
-        .map((t) => t.referenceNumber)
+        .map((t) => t.referenceNumber?.trim())
         .filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
     )
   }
@@ -49,12 +52,23 @@ export async function deduplicateTransactions(
   const minTime = new Date(Math.min(...timestamps) - 15 * 60 * 1000) // 15 mins before
   const maxTime = new Date(Math.max(...timestamps) + 15 * 60 * 1000) // 15 mins after
 
-  const existingInRange = await Transaction.find({
-    userId: userOid,
-    occurredAt: { $gte: minTime, $lte: maxTime },
-  })
-    .select("amountPaise type occurredAt merchant description referenceNumber")
-    .lean()
+  let existingInRange: Array<{
+    amountPaise: number
+    type: string
+    occurredAt: Date
+    merchant?: string
+    description?: string
+    referenceNumber?: string
+  }> = []
+
+  if (isConnected && userOid) {
+    existingInRange = await Transaction.find({
+      userId: userOid,
+      occurredAt: { $gte: minTime, $lte: maxTime },
+    })
+      .select("amountPaise type occurredAt merchant description referenceNumber")
+      .lean()
+  }
 
   const newTransactions: ParsedSyncTransaction[] = []
   let duplicateCount = 0
@@ -65,21 +79,30 @@ export async function deduplicateTransactions(
 
   for (const item of incoming) {
     let isDuplicate = false
+    const itemRef = item.referenceNumber?.trim()
 
     // A. Check by reference number (primary key for UPI / bank transfers)
-    if (item.referenceNumber) {
-      if (existingRefNumbers.has(item.referenceNumber) || batchRefNumbers.has(item.referenceNumber)) {
+    if (itemRef) {
+      if (existingRefNumbers.has(itemRef) || batchRefNumbers.has(itemRef)) {
         isDuplicate = true
       }
     }
 
     // B. Fallback: check by amount + time window + merchant
+    // CRITICAL: If BOTH transactions have reference numbers and they differ,
+    // they are separate transactions (e.g. repeated transfers to the same person)
+    // and MUST NEVER be considered duplicates!
     if (!isDuplicate) {
       const itemTime = item.occurredAt.getTime()
       const WINDOW_MS = 10 * 60 * 1000 // 10 minutes
 
       // Check against DB
       const matchedDb = existingInRange.some((dbTx) => {
+        const dbRef = dbTx.referenceNumber?.trim()
+        if (itemRef && dbRef && itemRef.toLowerCase() !== dbRef.toLowerCase()) {
+          return false
+        }
+
         if (dbTx.amountPaise !== item.amountPaise || dbTx.type !== item.type) return false
         const timeDiff = Math.abs(new Date(dbTx.occurredAt).getTime() - itemTime)
         if (timeDiff > WINDOW_MS) return false
@@ -98,6 +121,11 @@ export async function deduplicateTransactions(
       } else {
         // Check against current batch
         const matchedBatch = batchItems.some((batchTx) => {
+          const batchRef = batchTx.referenceNumber?.trim()
+          if (itemRef && batchRef && itemRef.toLowerCase() !== batchRef.toLowerCase()) {
+            return false
+          }
+
           if (batchTx.amountPaise !== item.amountPaise || batchTx.type !== item.type) return false
           const timeDiff = Math.abs(batchTx.occurredAt.getTime() - itemTime)
           if (timeDiff > WINDOW_MS) return false
@@ -118,8 +146,8 @@ export async function deduplicateTransactions(
     } else {
       newTransactions.push(item)
       batchItems.push(item)
-      if (item.referenceNumber) {
-        batchRefNumbers.add(item.referenceNumber)
+      if (itemRef) {
+        batchRefNumbers.add(itemRef)
       }
     }
   }

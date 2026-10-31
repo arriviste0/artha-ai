@@ -18,6 +18,9 @@ export interface TransactionDTO {
   isRecurring: boolean
   needsReview: boolean
   budgetId?: string
+  payeeKey?: string
+  payeeType?: "business" | "person" | "unknown"
+  categoryConfirmedByUser?: boolean
 }
 
 export interface TransactionFiltersInput {

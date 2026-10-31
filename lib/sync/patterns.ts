@@ -79,9 +79,9 @@ function cleanMerchant(str?: string): string {
 export function extractReferenceNumber(text: string): string | undefined {
   const match =
     text.match(
-      /\b(?:upi\s+(?:transaction\s+)?(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|rrn|utr|auth\s*code)\s*[:#]?\s*([A-Za-z0-9]+)/i
+      /\b(?:upi\s+(?:transaction\s+)?(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|rrn|utr|auth\s*code)\s*[:#.]?\s*([A-Za-z0-9]+)/i
     ) ||
-    text.match(/\b(?:reference|ref|txn\s*id)\b\s*[:#]?\s*([A-Za-z0-9]{6,})/i)
+    text.match(/\b(?:reference|ref|txn\s*id)\b\s*[:#.]?\s*([A-Za-z0-9]{5,})/i)
   return match ? match[1].trim() : undefined
 }
 
@@ -89,7 +89,7 @@ export const TRANSACTION_PATTERNS: PatternDefinition[] = [
   // 1. HDFC Email: "Rs.25.00 is debited from your account ending 6934 towards VPA ******3569@ybl (RAM MANU SINGH PAN SHOP) on 31-10-26."
   {
     name: "hdfc_debit_vpa_account_ending",
-    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:is|has been)\s+debited from your account (?:ending\s+|[*xX]*)(\d{4})\s+(?:towards|to)\s+(?:VPA\s+)?([^\n.]+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:is|has been)\s+debited from your account (?:ending\s+|[*xX]*)(\d{4})\s+(?:towards|to)\s+(?:VPA\s+)?(.+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
     extract: (m) => ({
       amountRupees: parseAmount(m[1]),
       type: "debit",
@@ -104,7 +104,7 @@ export const TRANSACTION_PATTERNS: PatternDefinition[] = [
   // 2. HDFC Email Credit: "Rs.500.00 is credited to your account ending 6934 from VPA user@upi (SENDER NAME) on 31-10-26."
   {
     name: "hdfc_credit_vpa_account_ending",
-    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:is|has been)\s+credited to your account (?:ending\s+|[*xX]*)(\d{4})\s+(?:from|by)\s+(?:VPA\s+)?([^\n.]+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:is|has been)\s+credited to your account (?:ending\s+|[*xX]*)(\d{4})\s+(?:from|by)\s+(?:VPA\s+)?(.+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
     extract: (m) => ({
       amountRupees: parseAmount(m[1]),
       type: "credit",
@@ -119,7 +119,7 @@ export const TRANSACTION_PATTERNS: PatternDefinition[] = [
   // 3. HDFC Email/SMS: "Rs.1,250.00 has been debited from account **1234 to VPA swiggy@icici on 15-OCT-24. Your UPI transaction reference number is 428912345678."
   {
     name: "hdfc_debit_vpa_email",
-    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been debited from account\s*[*xX]*(\d{4})\s+to\s+(?:VPA\s+)?([^\s.,]+@[^\s.,]+|[^\n,.]+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4})/i,
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been debited from account\s*[*xX]*(\d{4})\s+to\s+(?:VPA\s+)?([^\s,]+@[^\s,]+|.+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4})/i,
     extract: (m) => ({
       amountRupees: parseAmount(m[1]),
       type: "debit",

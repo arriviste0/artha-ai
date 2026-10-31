@@ -10,6 +10,7 @@ import { useAccounts } from "@/hooks/use-accounts"
 import { useBudgets } from "@/hooks/use-budgets"
 import { useDeleteTransaction, useUpdateTransaction, type TransactionDTO } from "@/hooks/use-transactions"
 import { TransactionForm } from "./transaction-form"
+import { PayeeConfirmChip } from "./payee-confirm-chip"
 import {
   Dialog,
   DialogContent,
@@ -204,6 +205,10 @@ export function TransactionTable({ transactions, total, page, limit, isLoading, 
                             {txn.description}
                           </p>
                         )}
+                        <PayeeConfirmChip
+                          transaction={txn}
+                          onOpenEdit={() => setEditingTxn(txn)}
+                        />
                       </div>
                       {txn.needsReview && (
                         <AlertCircle className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />

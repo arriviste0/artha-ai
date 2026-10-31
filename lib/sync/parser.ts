@@ -2,6 +2,14 @@ import { z } from "zod"
 import { isOtpMessage } from "./config"
 import { TRANSACTION_PATTERNS } from "./patterns"
 import { aiGenerate } from "@/lib/ai/provider"
+import {
+  ALLOWED_CATEGORIES,
+  type Category,
+  guardCategoryDirection,
+} from "@/lib/categorization/categories"
+import { runCategorizationPipeline } from "@/lib/categorization/pipeline"
+
+export { ALLOWED_CATEGORIES, type Category }
 
 export interface ParsedSyncTransaction {
   amountPaise: number
@@ -14,140 +22,28 @@ export interface ParsedSyncTransaction {
   referenceNumber?: string
   bank?: string
   source: "email_sync" | "sms_sync"
-}
-
-// Rule-based category matching — fast local check for common patterns
-const CATEGORY_RULES: { pattern: RegExp; category: string }[] = [
-  {
-    pattern:
-      /swiggy|zomato|eatsure|dominos|mcdonalds|kfc|pizza|starbucks|burger|pan shop|paan|chai|tea|coffee|dhaba|bhojanalaya|restaurant|cafe|bakery|sweets|mithai|hotel|canteen|food|kitchen|tiffin|snack|biryani|blinkit|zepto|instamart|bigbasket|big basket|grofers|dunzo|nature\'s basket|spencer\'s|reliance fresh|more retail|dmart|jiomart/i,
-    category: "Food & Dining",
-  },
-  { pattern: /netflix|prime|hotstar|spotify|youtube|bookmyshow|pvr|inox|movie/i, category: "Entertainment" },
-  {
-    pattern:
-      /ola|uber|rapido|irctc|makemytrip|goibibo|metro|petrol|diesel|fuel|hpcl|bpcl|iocl|cng|toll|fastag|railway|auto|cab|parking/i,
-    category: "Transport",
-  },
-  { pattern: /airtel|jio|vi |vodafone|bsnl|bescom|electricity|billdesk|broadband|wifi|water bill|gas/i, category: "Utilities" },
-  {
-    pattern:
-      /amazon|flipkart|myntra|meesho|ajio|kirana|store|mart|supermarket|provision|general store|bazaar|retail|mall|apparel|clothing|urban company|myntra fashion|the menswear store|global roots|globus|lenovo|hp|dell|apple|samsung|oneplus|mi|realme|nike|adidas|puma|reebok|skechers|woopron|fnp|kika/i,
-    category: "Shopping",
-  },
-  { pattern: /insurance|lic |hdfc life|icici pru|bajaj allianz|max life/i, category: "Insurance" },
-  { pattern: /emi|loan|equit[ay]|home loan|car loan/i, category: "EMI / Loans" },
-  { pattern: /salary|sal\/|salaryfor|payroll/i, category: "Salary" },
-  { pattern: /mutual fund|mf |sip |zerodha|groww|coin by|kuvera|indmoney|upstox|angelone|smallcase/i, category: "Investments" },
-  { pattern: /rent|pgpayment|housing|nobroker|maintenance/i, category: "Rent / Housing" },
-  {
-    pattern:
-      /apollo|fortis|manipal|hospital|clinic|pharmacy|medplus|1mg|pharmeasy|chemist|medico|medical|doctor|lab|diagnostic/i,
-    category: "Healthcare",
-  },
-  { pattern: /salon|parlour|spa|gym|fitness|cult\.fit|grooming/i, category: "Personal Care" },
-  { pattern: /byju|unacademy|coursera|udemy|school fee|college fee/i, category: "Education" },
-  { pattern: /transfer|trf|imps|neft|rtgs|upi\/p2p/i, category: "Transfer" },
-]
-
-export const ALLOWED_CATEGORIES = [
-  "Food & Dining",
-  "Rent / Housing",
-  "Transport",
-  "Utilities",
-  "Healthcare",
-  "Entertainment",
-  "Shopping",
-  "Education",
-  "Insurance",
-  "Investments",
-  "EMI / Loans",
-  "Personal Care",
-  "Salary",
-  "Transfer",
-  "Other",
-] as const
-
-const categoryCache = new Map<string, string>()
-
-function autoCategorize(text: string, type: "credit" | "debit"): string {
-  if (type === "credit") {
-    if (/salary|payroll/i.test(text)) return "Salary"
-    return "Transfer"
-  }
-  for (const rule of CATEGORY_RULES) {
-    if (rule.pattern.test(text)) {
-      return rule.category
-    }
-  }
-  return "Other"
+  payeeKey?: string
+  payeeType?: "business" | "person" | "unknown"
 }
 
 /**
- * AI-powered transaction categorization.
- * 1. Checks rule-based engine first.
- * 2. If ambiguous ("Other"), prompts Groq AI to judge where it fits (e.g. food, transport, shopping).
- * 3. Results are cached in memory for high performance.
+ * AI-powered transaction categorization using the master pipeline.
+ * Runs user rules, learned payee history, brand regex rules, and Groq fallback.
  */
 export async function judgeCategoryWithAI(
   merchant: string,
   fullText: string,
-  type: "credit" | "debit"
+  type: "credit" | "debit",
+  userId?: string
 ): Promise<string> {
-  // 1. Fast rule check
-  const ruleCategory = autoCategorize(`${merchant} ${fullText}`, type)
-  if (ruleCategory !== "Other" && (type === "debit" || ruleCategory === "Salary")) {
-    return ruleCategory
-  }
-
-  // 2. Cache lookup
-  const cacheKey = merchant.toLowerCase().trim()
-  if (cacheKey && categoryCache.has(cacheKey)) {
-    return categoryCache.get(cacheKey)!
-  }
-
-  // 3. AI judgment via Groq
-  try {
-    const prompt = `You are an Indian personal finance categorization expert.
-Classify this transaction into EXACTLY ONE category from the list.
-
-Merchant: "${merchant}"
-Details: "${fullText.slice(0, 300)}"
-Type: ${type}
-
-Categories:
-- Food & Dining (restaurants, cafes, food delivery, street food, pan shops, dhabas, snacks, bakeries, sweets, blinkit, zepto, instamart, bigbasket, grofers, dmart, jiomart, reliance fresh, nature\'s basket)
-- Shopping (retail, clothing, electronics, kirana, general stores, supermarkets, e-commerce, fashion, urban company, myntra, ajio)
-- Transport (cabs, autos, petrol pumps, fuel, metro, trains, flights, tolls, fastag, parking)
-- Utilities (electricity, water, gas, mobile recharge, broadband, DTH)
-- Healthcare (pharmacies, medical stores, doctors, hospitals, labs, clinics)
-- Entertainment (movies, OTT subscriptions, concerts, gaming, events)
-- Rent / Housing (house rent, society maintenance, domestic help)
-- Education (school/college fees, books, courses, coaching)
-- Investments (stocks, mutual funds, SIP, trading, crypto, gold)
-- Insurance (health, life, vehicle insurance premiums)
-- EMI / Loans (loan repayments, credit card bills, finance EMIs)
-- Personal Care (salon, barber, spa, gym, fitness)
-- Salary (salary credits from employer)
-- Transfer (person-to-person transfer, self transfer, family gift)
-- Other (only if completely unclassifiable)
-
-Return ONLY JSON: { "category": "<Exact Category Name>" }`
-
-    const res = await aiGenerate({ prompt, json: true })
-    const parsed = JSON.parse(res) as { category?: string }
-    const matched = ALLOWED_CATEGORIES.find(
-      (c) => c.toLowerCase() === (parsed.category || "").toLowerCase().trim()
-    )
-
-    const finalCategory = matched || (type === "credit" ? "Transfer" : "Other")
-    if (cacheKey) {
-      categoryCache.set(cacheKey, finalCategory)
-    }
-    return finalCategory
-  } catch {
-    return ruleCategory
-  }
+  const result = await runCategorizationPipeline({
+    userId,
+    merchant,
+    rawText: fullText,
+    amountRupees: 0,
+    type,
+  })
+  return result.category
 }
 
 function maskAccountNumber(last4?: string): string | undefined {
@@ -221,19 +117,27 @@ Return STRICT JSON only matching this format:
       }
     }
 
-    const category = await judgeCategoryWithAI(merchantName, text, parsed.type)
+    const pipelineResult = await runCategorizationPipeline({
+      merchant: merchantName,
+      rawText: text,
+      amountRupees: parsed.amount,
+      type: parsed.type,
+      occurredAt,
+    })
 
     return {
       amountPaise: Math.round(parsed.amount * 100),
       type: parsed.type,
       merchant: merchantName,
-      description: `${parsed.type === "credit" ? "Received from" : "Paid to"} ${merchantName}`,
-      category,
+      description: `${parsed.type === "credit" ? "Received from" : "Paid to"} ${pipelineResult.merchantClean || merchantName}`,
+      category: pipelineResult.category,
       occurredAt,
       accountNumberMasked: maskAccountNumber(parsed.accountLast4),
       referenceNumber: parsed.referenceNumber?.trim() || undefined,
       bank: parsed.bank?.trim() || undefined,
       source: "email_sync", // caller can override
+      payeeKey: pipelineResult.payeeKey,
+      payeeType: pipelineResult.payeeType,
     }
   } catch {
     return null
@@ -263,20 +167,45 @@ export async function parseTransactionAlert(
       const extracted = pattern.extract(match)
       if (extracted && extracted.amountRupees && extracted.amountRupees > 0 && extracted.type) {
         const merchant = extracted.merchant || "Bank Transaction"
-        const occurredAt = extracted.occurredAt ?? emailDate ?? new Date()
-        const category = await judgeCategoryWithAI(merchant, text, extracted.type)
+        let occurredAt = extracted.occurredAt ?? emailDate ?? new Date()
+        if (extracted.occurredAt && emailDate) {
+          // If the regex extracted a date with midnight UTC (no time of day in text),
+          // adopt the hour/minute/second from emailDate so timestamps are accurate and distinct
+          if (
+            extracted.occurredAt.getUTCHours() === 0 &&
+            extracted.occurredAt.getUTCMinutes() === 0 &&
+            extracted.occurredAt.getUTCSeconds() === 0
+          ) {
+            occurredAt = new Date(extracted.occurredAt)
+            occurredAt.setUTCHours(
+              emailDate.getUTCHours(),
+              emailDate.getUTCMinutes(),
+              emailDate.getUTCSeconds(),
+              emailDate.getUTCMilliseconds()
+            )
+          }
+        }
+        const pipelineResult = await runCategorizationPipeline({
+          merchant,
+          rawText: text,
+          amountRupees: extracted.amountRupees,
+          type: extracted.type,
+          occurredAt,
+        })
 
         return {
           amountPaise: Math.round(extracted.amountRupees * 100),
           type: extracted.type,
           merchant,
-          description: `${extracted.type === "credit" ? "Received from" : "Paid to"} ${merchant}`,
-          category,
+          description: `${extracted.type === "credit" ? "Received from" : "Paid to"} ${pipelineResult.merchantClean || merchant}`,
+          category: pipelineResult.category,
           occurredAt,
           accountNumberMasked: maskAccountNumber(extracted.accountLast4),
           referenceNumber: extracted.referenceNumber?.trim() || undefined,
           bank: extracted.bank || undefined,
           source,
+          payeeKey: pipelineResult.payeeKey,
+          payeeType: pipelineResult.payeeType,
         }
       }
     }

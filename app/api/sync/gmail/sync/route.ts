@@ -162,6 +162,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       category: item.category,
       referenceNumber: item.referenceNumber,
       accountNumberMasked: item.accountNumberMasked,
+      payeeKey: item.payeeKey,
+      payeeType: item.payeeType,
       source: "email_sync",
       needsReview: false,
     })

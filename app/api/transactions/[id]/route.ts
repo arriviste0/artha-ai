@@ -6,7 +6,9 @@ import Transaction from "@/models/transaction"
 import Account from "@/models/account"
 import Budget from "@/models/budget"
 import AuditLog from "@/models/audit-log"
+import PayeeProfile from "@/models/payee-profile"
 import { updateTransactionSchema } from "@/lib/validators/transaction"
+import { buildPayeeKey } from "@/lib/categorization/payee-detector"
 
 export const GET = withAuth(async (_req: NextRequest, { userId, params }) => {
   await connectDB()
@@ -72,6 +74,75 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
     updateData.goalId = null
   }
 
+  // If category changed, record user confirmation and handle applyToPast
+  let bulkUndoId: string | undefined = undefined
+  if (parsed.data.category && parsed.data.category !== before.category) {
+    updateData.categoryConfirmedByUser = true
+    const payeeKey =
+      before.payeeKey ||
+      buildPayeeKey({
+        payeeName: before.merchant || before.description,
+        rawText: before.description,
+      })
+    updateData.payeeKey = payeeKey
+
+    const userObjectId = new mongoose.Types.ObjectId(userId)
+    await PayeeProfile.findOneAndUpdate(
+      { userId: userObjectId, payeeKey, direction: before.type },
+      {
+        userConfirmedCategory: parsed.data.category,
+        locked: true,
+        lastCategory: parsed.data.category,
+        lastSeen: new Date(),
+        $inc: { txnCount: 1 },
+        $set: { [`categoryCounts.${parsed.data.category}`]: 1 },
+      },
+      { upsert: true }
+    )
+
+    if (parsed.data.applyToPast) {
+      const pastTxns = await Transaction.find({
+        userId: userObjectId,
+        payeeKey,
+        type: before.type,
+        _id: { $ne: before._id },
+      }).lean()
+
+      if (pastTxns.length > 0) {
+        const snapshot = pastTxns.map((t) => ({
+          transactionId: t._id.toString(),
+          previousCategory: t.category,
+          previousBudgetId: t.budgetId ? t.budgetId.toString() : null,
+        }))
+
+        const matchingBudget = await Budget.findOne({ userId: userObjectId, category: parsed.data.category })
+
+        await Transaction.updateMany(
+          { userId: userObjectId, payeeKey, type: before.type, _id: { $ne: before._id } },
+          {
+            $set: {
+              category: parsed.data.category,
+              categoryConfirmedByUser: true,
+              ...(matchingBudget ? { budgetId: matchingBudget._id } : {}),
+            },
+          }
+        )
+
+        const log = await AuditLog.create({
+          userId,
+          entity: "PayeeProfile",
+          entityId: payeeKey,
+          action: "bulk_recategorize",
+          before: { snapshot, payeeKey, direction: before.type, previousCategory: before.category },
+          after: { newCategory: parsed.data.category, updatedCount: pastTxns.length },
+        })
+        bulkUndoId = (log as unknown as { _id: { toString(): string } })._id.toString()
+      }
+    }
+  }
+
+  delete updateData.applyToPast
+
   const updated = await Transaction.findOneAndUpdate(
     { _id: params?.id, userId },
     { $set: updateData },
@@ -87,7 +158,7 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
     after: parsed.data as unknown as Record<string, unknown>,
   })
 
-  return NextResponse.json({ transaction: updated })
+  return NextResponse.json({ transaction: updated, bulkUndoId })
 })
 
 export const DELETE = withAuth(async (_req: NextRequest, { userId, params }) => {

@@ -12,11 +12,15 @@ export const createTransactionSchema = z.object({
   tags: z.array(z.string()).default([]),
   goalId: z.string().optional(),
   budgetId: z.string().optional(),
+  payeeKey: z.string().optional(),
+  applyToPast: z.boolean().optional(),
 })
 
 export const updateTransactionSchema = createTransactionSchema
   .partial()
-  .extend({ needsReview: z.boolean().optional() })
+  .extend({
+    needsReview: z.boolean().optional(),
+  })
 
 export const transactionFiltersSchema = z.object({
   from: z.string().datetime().optional(),
