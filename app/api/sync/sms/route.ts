@@ -13,6 +13,46 @@ interface IncomingSmsItem {
   date?: string
 }
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-secret, x-token, Authorization",
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders,
+  })
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const token = searchParams.get("token") || req.headers.get("x-secret") || req.headers.get("x-token")
+
+  let authenticated = false
+  if (token) {
+    try {
+      await connectDB()
+      const connection = await SyncConnection.findOne({ webhookToken: token })
+      if (connection) authenticated = true
+    } catch {
+      // ignore
+    }
+  }
+
+  return NextResponse.json(
+    {
+      status: "ok",
+      authenticated,
+      message: authenticated
+        ? "Webhook is reachable and your token is valid! Send POST requests from iOS Shortcuts to sync SMS."
+        : "Webhook is reachable! Send POST requests with your secret token to sync SMS.",
+    },
+    { headers: corsHeaders }
+  )
+}
+
 export async function POST(req: NextRequest) {
   await connectDB()
 
@@ -37,15 +77,29 @@ export async function POST(req: NextRequest) {
   }
 
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized. Missing valid session or token." }, { status: 401 })
+    return NextResponse.json(
+      { error: "Unauthorized. Missing valid session or token." },
+      { status: 401, headers: corsHeaders }
+    )
   }
 
-  // 2. Parse request body
+  // 2. Parse request body (JSON with fallback to plain text if Shortcuts sent text)
   let rawBody: unknown
   try {
     rawBody = await req.json()
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    try {
+      const text = await req.text()
+      if (text && text.trim()) {
+        rawBody = { text: text.trim() }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!rawBody) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400, headers: corsHeaders })
   }
 
   const items: IncomingSmsItem[] = []
@@ -75,7 +129,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (items.length === 0) {
-    return NextResponse.json({ error: "No SMS text provided to parse" }, { status: 400 })
+    return NextResponse.json({ error: "No SMS text provided to parse" }, { status: 400, headers: corsHeaders })
   }
 
   // 3. Parse each SMS (Regex first, LLM fallback, ignoring OTPs)
@@ -93,26 +147,35 @@ export async function POST(req: NextRequest) {
   }
 
   if (parsedCandidates.length === 0) {
-    return NextResponse.json({
-      syncedCount: 0,
-      skippedCount: 0,
-      unparseableCount,
-      transactions: [],
-      message: unparseableCount > 0 ? "SMS messages could not be parsed as financial transactions" : "No transactions found",
-    })
+    return NextResponse.json(
+      {
+        syncedCount: 0,
+        skippedCount: 0,
+        unparseableCount,
+        transactions: [],
+        message:
+          unparseableCount > 0
+            ? "SMS messages could not be parsed as financial transactions"
+            : "No transactions found",
+      },
+      { headers: corsHeaders }
+    )
   }
 
   // 4. Deduplicate (by ref number or amount + time + merchant)
   const { newTransactions, duplicateCount } = await deduplicateTransactions(userId, parsedCandidates)
 
   if (newTransactions.length === 0) {
-    return NextResponse.json({
-      syncedCount: 0,
-      skippedCount: duplicateCount,
-      unparseableCount,
-      transactions: [],
-      message: "All parsed transactions were already recorded (duplicates skipped)",
-    })
+    return NextResponse.json(
+      {
+        syncedCount: 0,
+        skippedCount: duplicateCount,
+        unparseableCount,
+        transactions: [],
+        message: "All parsed transactions were already recorded (duplicates skipped)",
+      },
+      { headers: corsHeaders }
+    )
   }
 
   // 5. Account resolution
@@ -178,11 +241,14 @@ export async function POST(req: NextRequest) {
     inserted.push(txn)
   }
 
-  return NextResponse.json({
-    syncedCount: inserted.length,
-    skippedCount: duplicateCount,
-    unparseableCount,
-    transactions: inserted,
-    message: `Successfully synced ${inserted.length} transactions from SMS`,
-  })
+  return NextResponse.json(
+    {
+      syncedCount: inserted.length,
+      skippedCount: duplicateCount,
+      unparseableCount,
+      transactions: inserted,
+      message: `Successfully synced ${inserted.length} transactions from SMS`,
+    },
+    { headers: corsHeaders }
+  )
 }

@@ -102,6 +102,9 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
   const [showRedirectGuide, setShowRedirectGuide] = useState(false)
   const [isSigningInGoogle, setIsSigningInGoogle] = useState(false)
 
+  // Custom webhook base URL (e.g. tunnel or domain for iOS access)
+  const [customBaseUrl, setCustomBaseUrl] = useState("")
+
   // Result state
   const [syncResult, setSyncResult] = useState<SyncMailResult | null>(null)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
@@ -125,6 +128,10 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
       setSyncResult(null)
       setEmailText("")
       refetchStatus()
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("artha_custom_webhook_base")
+        if (saved) setCustomBaseUrl(saved)
+      }
     }
   }, [open, refetchStatus])
 
@@ -296,8 +303,10 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
   const origin = typeof window !== "undefined" ? window.location.origin : ""
   const redirectUri = `${origin}/api/sync/gmail/callback`
   const secretToken = status?.webhookToken || "YOUR-SECRET"
-  const smsEndpointUrl = `${origin}/api/sync/sms`
-  const webhookUrl = `${origin}/api/sync/sms?token=${secretToken}`
+  const isLocalhost = Boolean(origin && (origin.includes("localhost") || origin.includes("127.0.0.1")))
+  const activeBaseUrl = (customBaseUrl.trim() || origin).replace(/\/+$/, "")
+  const smsEndpointUrl = `${activeBaseUrl}/api/sync/sms`
+  const webhookUrl = `${activeBaseUrl}/api/sync/sms?token=${secretToken}`
 
   const appleShortcutsPrompt = `When I receive a message containing "debited", get the current date, format it as ISO 8601, and send a POST request to ${smsEndpointUrl} with a JSON body that has two fields: "text" set to the message content, and "date" set to the formatted date. Add a header "x-secret" with the value ${secretToken}. Run automatically without asking and don't notify me.`
 
@@ -899,6 +908,81 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
 
                 {/* iOS Shortcuts Automation */}
                 <TabsContent value="ios" className="space-y-3 mt-3">
+                  {/* Localhost Warning Banner */}
+                  {isLocalhost && !customBaseUrl.trim() && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2 text-xs">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-semibold text-amber-500">iPhone cannot connect to &ldquo;localhost&rdquo;</p>
+                          <p className="text-muted-foreground text-[11px] leading-relaxed">
+                            On your iPhone, <code>localhost</code> points to the phone itself. That is why iOS says <em>&ldquo;Could not connect to the server&rdquo;</em>.
+                          </p>
+                          <div className="pt-1 space-y-1 text-muted-foreground text-[11px]">
+                            <p className="font-medium text-foreground">How to fix in 10 seconds:</p>
+                            <ol className="list-decimal list-inside space-y-1 pl-0.5">
+                              <li>
+                                Run this command in your computer terminal:
+                                <div className="mt-1 flex items-center justify-between font-mono text-[10px] bg-background/80 p-1.5 rounded border border-amber-500/20">
+                                  <span>npx localtunnel --port 3000</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 px-1.5 text-[10px]"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText("npx localtunnel --port 3000")
+                                      toast.success("Command copied!")
+                                    }}
+                                  >
+                                    <Copy className="h-2.5 w-2.5" />
+                                  </Button>
+                                </div>
+                              </li>
+                              <li>Copy the generated <code>https://...</code> URL and paste it below.</li>
+                            </ol>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom URL / Tunnel input */}
+                  <div className="space-y-1.5 rounded-xl border p-3 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-medium">Public / Tunnel URL for iPhone</Label>
+                      {customBaseUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomBaseUrl("")
+                            if (typeof window !== "undefined") {
+                              localStorage.removeItem("artha_custom_webhook_base")
+                            }
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                        >
+                          Reset to localhost
+                        </button>
+                      )}
+                    </div>
+                    <Input
+                      type="url"
+                      placeholder="e.g. https://xyz.loca.lt or http://192.168.1.2:3000"
+                      value={customBaseUrl}
+                      onChange={(e) => {
+                        setCustomBaseUrl(e.target.value)
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem("artha_custom_webhook_base", e.target.value)
+                        }
+                      }}
+                      className="h-7 text-xs font-mono"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Paste your tunnel URL or LAN IP so your iOS Shortcut connects from anywhere.
+                    </p>
+                  </div>
+
                   <div className="rounded-xl border p-3.5 bg-muted/30 space-y-3 text-xs">
                     <div>
                       <p className="font-semibold text-foreground flex items-center gap-1.5">
@@ -1032,6 +1116,18 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                         </Button>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between">
+                    <a
+                      href={`${smsEndpointUrl}?token=${secretToken}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Test webhook in browser (should return status: ok)
+                    </a>
                   </div>
                 </TabsContent>
               </Tabs>
