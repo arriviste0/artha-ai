@@ -145,16 +145,31 @@ interface GmailPart {
   parts?: GmailPart[]
 }
 
+export function cleanHtmlToText(rawHtml: string): string {
+  return rawHtml
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 function extractTextFromParts(parts?: GmailPart[]): string {
   if (!parts) return ""
   let text = ""
   for (const part of parts) {
     if (part.mimeType === "text/plain" && part.body?.data) {
       text += " " + decodeBase64Url(part.body.data)
-    } else if (part.mimeType === "text/html" && part.body?.data && !text) {
-      // Strip html tags
+    } else if (part.mimeType === "text/html" && part.body?.data) {
       const rawHtml = decodeBase64Url(part.body.data)
-      text += " " + rawHtml.replace(/<[^>]+>/g, " ")
+      text += " " + cleanHtmlToText(rawHtml)
     } else if (part.parts) {
       text += " " + extractTextFromParts(part.parts)
     }
@@ -248,15 +263,26 @@ export async function fetchBankEmails(
           }
 
           let bodyText = decodeBase64Url(data.payload?.body?.data)
-          if (!bodyText && data.payload?.parts) {
+          if (bodyText) {
+            bodyText = cleanHtmlToText(bodyText)
+          } else if (data.payload?.parts) {
             bodyText = extractTextFromParts(data.payload.parts)
           }
+
+          // Do NOT prepend snippet before bodyText if bodyText exists!
+          // Google snippets frequently truncate right before critical numbers
+          // (e.g. "... UPI transaction reference no.:"), causing snippet words
+          // to collide with the start of bodyText and corrupt regex matching.
+          const textContent =
+            bodyText && bodyText.trim().length > 0
+              ? bodyText
+              : (data.snippet || "")
 
           return {
             id: data.id,
             subject,
             snippet: data.snippet || "",
-            bodyText: `${subject} ${data.snippet || ""} ${bodyText}`.replace(/\s+/g, " ").trim(),
+            bodyText: `${subject} ${textContent}`.replace(/\s+/g, " ").trim(),
             date,
           }
         } catch {

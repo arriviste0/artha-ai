@@ -42,7 +42,7 @@ export async function deduplicateTransactions(
 
     existingRefNumbers = new Set(
       existingWithRefs
-        .map((t) => t.referenceNumber?.trim())
+        .map((t) => t.referenceNumber?.trim().toLowerCase())
         .filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
     )
   }
@@ -80,26 +80,29 @@ export async function deduplicateTransactions(
   for (const item of incoming) {
     let isDuplicate = false
     const itemRef = item.referenceNumber?.trim()
+    const itemRefLower = itemRef?.toLowerCase()
 
     // A. Check by reference number (primary key for UPI / bank transfers)
-    if (itemRef) {
-      if (existingRefNumbers.has(itemRef) || batchRefNumbers.has(itemRef)) {
+    if (itemRefLower) {
+      if (existingRefNumbers.has(itemRefLower) || batchRefNumbers.has(itemRefLower)) {
         isDuplicate = true
       }
     }
 
     // B. Fallback: check by amount + time window + merchant
-    // CRITICAL: If BOTH transactions have reference numbers and they differ,
-    // they are separate transactions (e.g. repeated transfers to the same person)
-    // and MUST NEVER be considered duplicates!
+    // CRITICAL:
+    // 1. If BOTH transactions have reference numbers and they differ,
+    //    they are separate transactions and MUST NEVER be considered duplicates!
+    // 2. Fallback window is 60 seconds (same minute) to avoid dropping legitimate repeat
+    //    payments (e.g. split or retry payments 14s apart).
     if (!isDuplicate) {
       const itemTime = item.occurredAt.getTime()
-      const WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+      const WINDOW_MS = 60 * 1000 // 60 seconds
 
       // Check against DB
       const matchedDb = existingInRange.some((dbTx) => {
-        const dbRef = dbTx.referenceNumber?.trim()
-        if (itemRef && dbRef && itemRef.toLowerCase() !== dbRef.toLowerCase()) {
+        const dbRef = dbTx.referenceNumber?.trim().toLowerCase()
+        if (itemRefLower && dbRef && itemRefLower !== dbRef) {
           return false
         }
 
@@ -121,8 +124,8 @@ export async function deduplicateTransactions(
       } else {
         // Check against current batch
         const matchedBatch = batchItems.some((batchTx) => {
-          const batchRef = batchTx.referenceNumber?.trim()
-          if (itemRef && batchRef && itemRef.toLowerCase() !== batchRef.toLowerCase()) {
+          const batchRef = batchTx.referenceNumber?.trim().toLowerCase()
+          if (itemRefLower && batchRef && itemRefLower !== batchRef) {
             return false
           }
 
@@ -146,8 +149,8 @@ export async function deduplicateTransactions(
     } else {
       newTransactions.push(item)
       batchItems.push(item)
-      if (itemRef) {
-        batchRefNumbers.add(itemRef)
+      if (itemRefLower) {
+        batchRefNumbers.add(itemRefLower)
       }
     }
   }

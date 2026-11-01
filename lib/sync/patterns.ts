@@ -76,13 +76,38 @@ function cleanMerchant(str?: string): string {
   return clean || "Bank Transfer"
 }
 
+const INVALID_REF_TOKENS = new Set([
+  "hdfc", "bank", "icici", "sbi", "axis", "kotak", "pnb", "bob", "idfc", "indusind", "yes", "canara", "federal", "union", "rbl", "paytm", "airtel",
+  "upi", "imps", "neft", "rtgs", "rrn", "utr", "txn", "ref", "reference",
+  "dr", "cr", "null", "undefined", "none", "na", "to", "from", "is",
+  "dear", "customer", "your", "account", "ending", "towards", "vpa",
+  "no", "num", "number", "at", "on", "in", "by", "rs", "inr"
+])
+
 export function extractReferenceNumber(text: string): string | undefined {
-  const match =
-    text.match(
-      /\b(?:upi\s+(?:transaction\s+)?(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|rrn|utr|auth\s*code)\s*[:#.]?\s*([A-Za-z0-9]+)/i
-    ) ||
-    text.match(/\b(?:reference|ref|txn\s*id)\b\s*[:#.]?\s*([A-Za-z0-9]{5,})/i)
-  return match ? match[1].trim() : undefined
+  if (!text) return undefined
+
+  const patterns = [
+    /\b(?:upi\s+(?:transaction\s+)?(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|(?:reference|ref)\b(?:\s+(?:number|no\.?|num))?(?:\s+is)?|rrn|utr|auth\s*code)\s*[:#.]?\s*(?:[A-Za-z]{1,12}\s+)*([A-Za-z0-9]{4,})/gi,
+    /\b(?:reference|ref|txn\s*id)\b\s*[:#.]?\s*(?:[A-Za-z]{1,12}\s+)*([A-Za-z0-9]{4,})/gi,
+  ]
+
+  for (const regex of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(text)) !== null) {
+      const candidate = match[1]?.trim().replace(/[.,;:]+$/, "")
+      if (!candidate) continue
+
+      const lower = candidate.toLowerCase()
+      if (INVALID_REF_TOKENS.has(lower)) continue
+      if (candidate.length < 4) continue
+      if (/^[A-Za-z]+$/.test(candidate) && candidate.length < 6) continue
+
+      return candidate
+    }
+  }
+
+  return undefined
 }
 
 export const TRANSACTION_PATTERNS: PatternDefinition[] = [

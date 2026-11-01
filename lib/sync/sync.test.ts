@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest"
 import { isOtpMessage, buildGmailQuery, getAllBankEmailSenders } from "./config"
-import { TRANSACTION_PATTERNS } from "./patterns"
+import { TRANSACTION_PATTERNS, extractReferenceNumber } from "./patterns"
 import { parseTransactionAlert } from "./parser"
 import { deduplicateTransactions } from "./dedupe"
+import { cleanHtmlToText } from "./gmail"
 
 describe("Bank Alert Sync Tests", () => {
   describe("Config & Senders", () => {
@@ -178,6 +179,54 @@ Rs.2000.00 is debited from your account ending 6934 towards VPA ***************3
       const { newTransactions, duplicateCount } = await deduplicateTransactions("test_user_repeat", [tx1!, tx2!])
       expect(newTransactions).toHaveLength(2)
       expect(duplicateCount).toBe(0)
+    })
+
+    it("cleanHtmlToText should strip style, script, comments and HTML entities", () => {
+      const html = `<html>
+        <head>
+          <style type="text/css">
+            <!-- HDFC BANK --> @media screen { body { color: red; } }
+          </style>
+        </head>
+        <body>
+          <script>console.log('secret');</script>
+          <p>Dear Customer, Rs.10000.00 is debited from account ending 6934 &amp; &nbsp; towards VPA user@upi.</p>
+        </body>
+      </html>`
+
+      const text = cleanHtmlToText(html)
+      expect(text).not.toContain("HDFC BANK")
+      expect(text).not.toContain("console.log")
+      expect(text).not.toContain("@media")
+      expect(text).toContain("Rs.10000.00 is debited from account ending 6934 & towards VPA user@upi.")
+    })
+
+    it("extractReferenceNumber should never extract bank name or blacklisted tokens", () => {
+      // Even if "HDFC" or "Bank" appears right after the reference label, skip it and extract the real number
+      const text1 = "UPI transaction reference no.: HDFC Bank 132122110737 on 31-10-26"
+      expect(extractReferenceNumber(text1)).toBe("132122110737")
+
+      const text2 = "Your UPI transaction reference number is 428912345678."
+      expect(extractReferenceNumber(text2)).toBe("428912345678")
+
+      const text3 = "Alert: txn id: 987654321 is completed"
+      expect(extractReferenceNumber(text3)).toBe("987654321")
+    })
+
+    it("should correctly sync real HDFC email text without reference number collision", async () => {
+      const rawHtml = `<style type="text/css"><!-- HDFC BANK --> body { color: #000; }</style>
+        <p>Dear Customer,</p>
+        <p>Greetings from HDFC Bank!</p>
+        <p>Rs.10000.00 is debited from your account ending 6934 towards VPA ******3272@pthdfc (PATEL VED RITESHKUMAR) on 31-10-26. UPI transaction reference no.: 132122110737.</p>`
+
+      const cleanText = cleanHtmlToText(rawHtml)
+      const res = await parseTransactionAlert(cleanText, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(1000000)
+      expect(res?.merchant).toBe("PATEL VED RITESHKUMAR")
+      expect(res?.referenceNumber).toBe("132122110737")
+      expect(res?.referenceNumber).not.toBe("HDFC")
     })
   })
 })

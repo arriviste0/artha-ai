@@ -29,13 +29,14 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   }
 
   // Determine sync date range:
-  // User selected date > lastSyncedAt > default 90 days ago
+  // User selected date > lastSyncedAt (with 7-day safety buffer) > default 90 days ago
   let fromDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   if (body.fromDate) {
     const custom = new Date(body.fromDate)
     if (!isNaN(custom.getTime())) fromDate = custom
   } else if (connection.lastSyncedAt) {
-    fromDate = connection.lastSyncedAt
+    // 7-day safety buffer ensures boundary or delayed bank emails are never missed
+    fromDate = new Date(connection.lastSyncedAt.getTime() - 7 * 24 * 60 * 60 * 1000)
   }
 
   let accessToken: string
