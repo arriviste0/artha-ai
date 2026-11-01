@@ -57,19 +57,68 @@ async function groqGenerate(opts: GenerateOpts): Promise<string> {
   const model = cleanConfig(process.env.GROQ_MODEL) || "openai/gpt-oss-120b"
 
   const messages: Array<{ role: "system" | "user"; content: string }> = []
-  if (opts.systemPrompt) {
-    messages.push({ role: "system", content: opts.systemPrompt })
+  const systemPrompt =
+    opts.systemPrompt ||
+    (opts.json
+      ? "You are a financial AI assistant. You must respond strictly with valid JSON only. Do not include markdown codeblocks or conversational text."
+      : undefined)
+
+  if (systemPrompt) {
+    messages.push({ role: "system", content: systemPrompt })
   }
   messages.push({ role: "user", content: opts.prompt })
 
-  const completion = await groq.chat.completions.create({
-    model,
-    messages,
-    temperature: opts.temperature ?? 0,
-    ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-  })
+  try {
+    const completion = await groq.chat.completions.create({
+      model,
+      messages,
+      temperature: opts.temperature ?? 0,
+      ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+    })
 
-  return completion.choices[0]?.message?.content ?? ""
+    const content = completion.choices[0]?.message?.content ?? ""
+    if (opts.json && !content.trim()) {
+      throw new Error("Empty response from Groq JSON mode")
+    }
+    return content
+  } catch (err: unknown) {
+    const errStr = String(err)
+    // If Groq JSON mode validation failed (common with reasoning models like openai/gpt-oss-120b when outputting reasoning tokens),
+    // retry once without response_format constraint and parse JSON from the response text
+    if (
+      opts.json &&
+      (errStr.includes("json_validate_failed") ||
+        errStr.includes("Failed to validate JSON") ||
+        errStr.includes("Empty response"))
+    ) {
+      try {
+        const retryCompletion = await groq.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a financial AI. Output MUST be a valid JSON object only. No markdown formatting, no conversational text.",
+            },
+            {
+              role: "user",
+              content: opts.prompt + "\n\nCRITICAL: Respond with a pure JSON object only.",
+            },
+          ],
+          temperature: 0,
+        })
+        const text = retryCompletion.choices[0]?.message?.content ?? ""
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          return jsonMatch[0]
+        }
+        return text
+      } catch (retryErr) {
+        throw retryErr
+      }
+    }
+    throw err
+  }
 }
 
 async function ollamaGenerate(opts: GenerateOpts): Promise<string> {
