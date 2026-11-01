@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
           ...(email ? { email } : {}),
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     )
 
     return NextResponse.redirect(`${appBase}/transactions?sync=gmail-connected`)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, X, Edit2, AlertTriangle } from "lucide-react"
+import { Check, X, Edit2, AlertTriangle, ArrowDownLeft, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +28,7 @@ const CATEGORIES = [
 interface EditState {
   description: string
   category: string
+  type: "credit" | "debit"
 }
 
 interface Props {
@@ -37,7 +38,7 @@ interface Props {
 
 export function ReviewTable({ uploadId, drafts }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editState, setEditState] = useState<EditState>({ description: "", category: "" })
+  const [editState, setEditState] = useState<EditState>({ description: "", category: "", type: "debit" })
   const [localDrafts, setLocalDrafts] = useState<DraftTransaction[]>(drafts)
   const router = useRouter()
 
@@ -46,12 +47,28 @@ export function ReviewTable({ uploadId, drafts }: Props) {
 
   const pending = localDrafts.filter((d) => d.status === "pending")
   const accepted = localDrafts.filter((d) => d.status === "accepted")
+  const rejected = localDrafts.filter((d) => d.status === "rejected")
 
-  const setStatus = async (draftId: string, status: "accepted" | "rejected", overrides?: Partial<EditState>) => {
+  const debits = localDrafts.filter((d) => d.type === "debit" && d.status !== "rejected")
+  const credits = localDrafts.filter((d) => d.type === "credit" && d.status !== "rejected")
+  const totalDebitPaise = debits.reduce((acc, d) => acc + d.amountPaise, 0)
+  const totalCreditPaise = credits.reduce((acc, d) => acc + d.amountPaise, 0)
+
+  const setStatus = async (
+    draftId: string,
+    status: "accepted" | "rejected",
+    overrides?: Partial<EditState>
+  ) => {
     setLocalDrafts((prev) =>
       prev.map((d) =>
         d._id === draftId
-          ? { ...d, status, ...(overrides?.description ? { description: overrides.description } : {}), ...(overrides?.category ? { category: overrides.category } : {}) }
+          ? {
+              ...d,
+              status,
+              ...(overrides?.description ? { description: overrides.description } : {}),
+              ...(overrides?.category ? { category: overrides.category } : {}),
+              ...(overrides?.type ? { type: overrides.type } : {}),
+            }
           : d
       )
     )
@@ -62,9 +79,30 @@ export function ReviewTable({ uploadId, drafts }: Props) {
     })
   }
 
+  const toggleType = async (draft: DraftTransaction) => {
+    const newType = draft.type === "credit" ? "debit" : "credit"
+    setLocalDrafts((prev) =>
+      prev.map((d) => (d._id === draft._id ? { ...d, type: newType } : d))
+    )
+
+    await updateDrafts.mutateAsync({
+      id: uploadId,
+      updates: [{
+        draftId: draft._id!,
+        status: draft.status === "rejected" ? "rejected" : "accepted",
+        type: newType,
+      }],
+    })
+    toast.success(`Updated to ${newType === "credit" ? "Credit (+)" : "Debit (-)"}`)
+  }
+
   const startEdit = (draft: DraftTransaction) => {
     setEditingId(draft._id!)
-    setEditState({ description: draft.description, category: draft.category })
+    setEditState({
+      description: draft.description,
+      category: draft.category,
+      type: draft.type,
+    })
   }
 
   const saveEdit = async (draftId: string) => {
@@ -74,11 +112,12 @@ export function ReviewTable({ uploadId, drafts }: Props) {
 
   const acceptAll = async () => {
     const pendingDrafts = localDrafts.filter((d) => d.status === "pending")
-    setLocalDrafts((prev) => prev.map((d) => d.status === "pending" ? { ...d, status: "accepted" } : d))
+    setLocalDrafts((prev) => prev.map((d) => (d.status === "pending" ? { ...d, status: "accepted" } : d)))
     await updateDrafts.mutateAsync({
       id: uploadId,
       updates: pendingDrafts.map((d) => ({ draftId: d._id!, status: "accepted" as const })),
     })
+    toast.success(`Accepted ${pendingDrafts.length} transactions`)
   }
 
   const handleCommit = async () => {
@@ -93,11 +132,38 @@ export function ReviewTable({ uploadId, drafts }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Top summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 rounded-lg border bg-card text-card-foreground">
+          <p className="text-xs text-muted-foreground font-medium">Pending Review</p>
+          <p className="text-lg font-bold">{pending.length}</p>
+        </div>
+        <div className="p-3 rounded-lg border bg-card text-card-foreground">
+          <p className="text-xs text-muted-foreground font-medium">Accepted</p>
+          <p className="text-lg font-bold text-emerald-600">{accepted.length}</p>
+        </div>
+        <div className="p-3 rounded-lg border bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40">
+          <p className="text-xs text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
+            <ArrowUpRight className="h-3 w-3" /> Debits ({debits.length})
+          </p>
+          <p className="text-lg font-bold text-rose-700 dark:text-rose-300">
+            {formatINR(totalDebitPaise)}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/40">
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+            <ArrowDownLeft className="h-3 w-3" /> Credits ({credits.length})
+          </p>
+          <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+            {formatINR(totalCreditPaise)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-2">
         <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>{pending.length} pending</span>
-          <span className="text-green-600 font-medium">{accepted.length} accepted</span>
-          <span>{localDrafts.filter((d) => d.status === "rejected").length} rejected</span>
+          <span>{localDrafts.length} total rows</span>
+          {rejected.length > 0 && <span>· {rejected.length} rejected</span>}
         </div>
         <div className="flex gap-2">
           {pending.length > 0 && (
@@ -121,6 +187,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
             <tr>
               <th className="text-left px-3 py-2 text-muted-foreground font-medium">Date</th>
               <th className="text-left px-3 py-2 text-muted-foreground font-medium">Description</th>
+              <th className="text-left px-3 py-2 text-muted-foreground font-medium">Type</th>
               <th className="text-left px-3 py-2 text-muted-foreground font-medium">Category</th>
               <th className="text-right px-3 py-2 text-muted-foreground font-medium">Amount</th>
               <th className="px-3 py-2"></th>
@@ -161,6 +228,55 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                     </div>
                   )}
                 </td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {editingId === draft._id ? (
+                    <div className="inline-flex rounded-md border p-0.5 bg-muted/40">
+                      <button
+                        type="button"
+                        onClick={() => setEditState((s) => ({ ...s, type: "debit" }))}
+                        className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${
+                          editState.type === "debit"
+                            ? "bg-rose-600 text-white shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Debit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditState((s) => ({ ...s, type: "credit" }))}
+                        className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${
+                          editState.type === "credit"
+                            ? "bg-emerald-600 text-white shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Credit
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleType(draft)}
+                      title="Click to toggle between Debit and Credit"
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                        draft.type === "credit"
+                          ? "bg-emerald-100/80 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+                          : "bg-rose-100/80 text-rose-800 border border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800"
+                      }`}
+                    >
+                      {draft.type === "credit" ? (
+                        <>
+                          <ArrowDownLeft className="h-3 w-3" /> Credit
+                        </>
+                      ) : (
+                        <>
+                          <ArrowUpRight className="h-3 w-3" /> Debit
+                        </>
+                      )}
+                    </button>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   {editingId === draft._id ? (
                     <Select
@@ -183,7 +299,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2 text-right font-medium whitespace-nowrap">
-                  <span className={draft.type === "credit" ? "text-green-600" : "text-foreground"}>
+                  <span className={draft.type === "credit" ? "text-emerald-600 font-semibold" : "text-foreground"}>
                     {draft.type === "credit" ? "+" : "-"}{formatINR(draft.amountPaise)}
                   </span>
                 </td>
@@ -194,6 +310,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                         type="button"
                         onClick={() => saveEdit(draft._id!)}
                         className="text-green-600 hover:text-green-700"
+                        title="Save edit"
                       >
                         <Check className="h-4 w-4" />
                       </button>
@@ -201,6 +318,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                         type="button"
                         onClick={() => setEditingId(null)}
                         className="text-muted-foreground hover:text-foreground"
+                        title="Cancel"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -213,6 +331,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                             type="button"
                             onClick={() => setStatus(draft._id!, "accepted")}
                             className="text-green-600 hover:text-green-700"
+                            title="Accept"
                           >
                             <Check className="h-4 w-4" />
                           </button>
@@ -220,6 +339,7 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                             type="button"
                             onClick={() => startEdit(draft)}
                             className="text-muted-foreground hover:text-foreground"
+                            title="Edit"
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
@@ -227,25 +347,38 @@ export function ReviewTable({ uploadId, drafts }: Props) {
                             type="button"
                             onClick={() => setStatus(draft._id!, "rejected")}
                             className="text-destructive hover:text-destructive/80"
+                            title="Reject"
                           >
                             <X className="h-4 w-4" />
                           </button>
                         </>
                       )}
                       {draft.status === "accepted" && (
-                        <button
-                          type="button"
-                          onClick={() => setStatus(draft._id!, "rejected")}
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(draft)}
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStatus(draft._id!, "rejected")}
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Reject"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                       {draft.status === "rejected" && (
                         <button
                           type="button"
                           onClick={() => setStatus(draft._id!, "accepted")}
                           className="text-muted-foreground hover:text-green-600"
+                          title="Restore"
                         >
                           <Check className="h-4 w-4" />
                         </button>

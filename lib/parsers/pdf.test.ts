@@ -65,6 +65,48 @@ Date       Narration                               Chq/Ref No    Debit        Cr
     expect(transfer.credit).toBe(0)
   })
 
+  it("should assemble multi-line wrapped rows and detect credits via balance delta", async () => {
+    const multiLineStatement = `
+HDFC BANK ACCOUNT STATEMENT
+29/10/26 UPI-EURONET SERVICES 0001 30/10/26 51.00 8,602.35
+30/10/26 ACH C-TECH MAHINDRA-SALARY
+FOR OCT 2026 0002 30/10/26 53,661.00 62,263.35
+30/10/26 IB BILLPAY DR-HDFC 0003 30/10/26 12,082.41 50,180.94
+30/10/26 UPI-ZEPTO MARKETPLACE 0004 30/10/26 209.00 47,273.50
+30/10/26 UPI-RAZORPAY-REFUND 0005 30/10/26 209.00 47,482.50
+31/10/26 UPI-PATEL VED RITESHKUMAR
+(PATEL VED) 0006 31/10/26 10,000.00 37,482.50
+31/10/26 UPI-ZALAVADIYA JENIL KUM-6219@YESP 0007 31/10/26 1,000.00 38,482.50
+`
+    mockGetDocumentProxy.mockResolvedValue({})
+    mockExtractText.mockResolvedValue({ text: multiLineStatement, totalPages: 1 })
+
+    const fakePdfBuffer = Buffer.from("%PDF-1.7 sample fake pdf")
+    const result = await parsePDF(fakePdfBuffer)
+
+    expect(result.rows).toHaveLength(7)
+
+    // ACH salary: credit 53,661
+    expect(result.rows[1].credit).toBe(5366100)
+    expect(result.rows[1].debit).toBe(0)
+
+    // IB Billpay: debit 12,082.41
+    expect(result.rows[2].debit).toBe(1208241)
+    expect(result.rows[2].credit).toBe(0)
+
+    // Razorpay refund: balance increased from 47,273.50 to 47,482.50 (+209) -> Credit!
+    expect(result.rows[4].credit).toBe(20900)
+    expect(result.rows[4].debit).toBe(0)
+
+    // Patel Ved wrapped line: debit 10,000
+    expect(result.rows[5].debit).toBe(1000000)
+    expect(result.rows[5].credit).toBe(0)
+
+    // Zalavadiya Jenil: balance increased from 37,482.50 to 38,482.50 (+1000) -> Credit!
+    expect(result.rows[6].credit).toBe(100000)
+    expect(result.rows[6].debit).toBe(0)
+  })
+
   it("should handle password-protected PDF exception gracefully", async () => {
     mockGetDocumentProxy.mockRejectedValue({
       name: "PasswordException",

@@ -13,6 +13,7 @@ const draftUpdateSchema = z.object({
   status: z.enum(["accepted", "rejected"]),
   description: z.string().optional(),
   category: z.string().optional(),
+  type: z.enum(["credit", "debit"]).optional(),
   occurredAt: z.string().optional(),
 })
 
@@ -28,7 +29,7 @@ export const GET = withAuth(async (_req: NextRequest, { userId, params }) => {
   return NextResponse.json({ upload })
 })
 
-// PATCH: apply draft edits (description/category overrides, accept/reject flags)
+// PATCH: apply draft edits (description/category/type overrides, accept/reject flags)
 export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
   const body: unknown = await req.json()
   const parsed = reviewBodySchema.safeParse(body)
@@ -46,6 +47,7 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
     draft.status = update.status
     if (update.description) draft.description = update.description
     if (update.category) draft.category = update.category
+    if (update.type) draft.type = update.type
     if (update.occurredAt) draft.occurredAt = update.occurredAt
   }
 

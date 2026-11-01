@@ -87,24 +87,74 @@ function normalizeDateStr(raw: string): string {
 }
 
 /**
+ * Assembles raw text lines into distinct statement transaction rows,
+ * combining multi-line entries (e.g. wrapped narrations, split dates/amounts)
+ * and filtering out non-transaction headers/footers.
+ */
+function assembleStatementLines(text: string): string[] {
+  const rawLines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  const dateRegex =
+    /^(?:\d+[\s.)|]+)?(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/.\s]+[A-Za-z]{3}[-/.\s]+\d{2,4}|\d{4}-\d{2}-\d{2})\b/i
+
+  const headerFilter =
+    /^(?:page\s+\d+|statement\s+of|account\s+number|account\s+statement|customer\s+name|joint\s+holder|nomination|registered\s+mobile|branch\s+name|ifsc|micr|currency|opening\s+balance|total\s+withdrawal|total\s+deposit|summary|date\s+narration|sl\s+no|transaction\s+date|value\s+date)\b/i
+
+  const assembled: string[] = []
+  let currentBlock = ""
+
+  for (const line of rawLines) {
+    if (headerFilter.test(line)) {
+      if (currentBlock) {
+        assembled.push(currentBlock)
+        currentBlock = ""
+      }
+      continue
+    }
+
+    if (dateRegex.test(line)) {
+      if (currentBlock) {
+        assembled.push(currentBlock)
+      }
+      currentBlock = line
+    } else if (currentBlock) {
+      currentBlock += " " + line
+    }
+  }
+
+  if (currentBlock) {
+    assembled.push(currentBlock)
+  }
+
+  return assembled
+}
+
+/**
  * Deterministic statement table extractor.
  * Scans tabular lines common in Indian bank statements (HDFC, SBI, ICICI, Axis, Kotak, etc.).
- * Extracts date, narration, debit/credit, and assigns categories instantly without AI dependency.
+ * Assembles multi-line records and reconciles Debit vs Credit using closing balance delta,
+ * explicit Dr/Cr tags, and narration keywords.
  */
 async function extractTransactionsFromTextRules(text: string): Promise<RawRow[]> {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  const candidateRows: Array<{
+  const lines = assembleStatementLines(text)
+
+  const dateRegex =
+    /^(?:\d+[\s.)|]+)?(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/.\s]+[A-Za-z]{3}[-/.\s]+\d{2,4}|\d{4}-\d{2}-\d{2})\b/i
+
+  interface Candidate {
+    rawDate: string
     date: string
     description: string
-    debitPaise: number
-    creditPaise: number
+    txnAmount: number
+    closingBalance: number | null
+    explicitType: "credit" | "debit" | null
     rawLine: string
-  }> = []
+  }
 
-  // Pattern matching dates at beginning of transaction line:
-  // e.g. 15/10/2024, 15-10-24, 15-OCT-2024, 15 Oct 2024, 2024-10-15
-  const dateRegex =
-    /^(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}[-/.\s]+[A-Za-z]{3}[-/.\s]+\d{2,4}|\d{4}-\d{2}-\d{2})\b/i
+  const candidates: Candidate[] = []
 
   for (const line of lines) {
     const dateMatch = line.match(dateRegex)
@@ -122,59 +172,41 @@ async function extractTransactionsFromTextRules(text: string): Promise<RawRow[]>
 
     if (amountMatches.length === 0) continue
 
-    let debitRupees = 0
-    let creditRupees = 0
+    let txnAmount = 0
+    let closingBalance: number | null = null
+    let explicitType: "credit" | "debit" | null = null
 
-    const isExplicitDr = /\b(Dr|Debit|Withdrawal)\b/i.test(line)
-    const isExplicitCr = /\b(Cr|Credit|Deposit)\b/i.test(line)
+    if (/\b(Cr|Credit|Deposit)\b/i.test(line)) explicitType = "credit"
+    if (/\b(Dr|Debit|Withdrawal)\b/i.test(line)) explicitType = "debit"
 
     if (amountMatches.length >= 3) {
       // 3 amounts: [Debit, Credit, Balance]
       const amt1 = parseFloat(amountMatches[0][1].replace(/,/g, ""))
       const amt2 = parseFloat(amountMatches[1][1].replace(/,/g, ""))
+      const amt3 = parseFloat(amountMatches[2][1].replace(/,/g, ""))
+      closingBalance = amt3
 
       if (amt1 > 0 && amt2 === 0) {
-        debitRupees = amt1
+        txnAmount = amt1
+        explicitType = "debit"
       } else if (amt2 > 0 && amt1 === 0) {
-        creditRupees = amt2
+        txnAmount = amt2
+        explicitType = "credit"
       } else if (amt1 > 0) {
-        debitRupees = amt1
+        txnAmount = amt1
       }
     } else if (amountMatches.length === 2) {
       // 2 amounts: [Txn Amount, Balance]
-      const amt = parseFloat(amountMatches[0][1].replace(/,/g, ""))
-      if (isExplicitCr) {
-        creditRupees = amt
-      } else if (isExplicitDr) {
-        debitRupees = amt
-      } else {
-        // Infer from description keywords
-        if (
-          /\b(salary|credited|refund|interest|reversal|cashback|dividend|bonus|deposit)\b/i.test(
-            line
-          )
-        ) {
-          creditRupees = amt
-        } else {
-          debitRupees = amt
-        }
-      }
-    } else if (amountMatches.length === 1) {
+      txnAmount = parseFloat(amountMatches[0][1].replace(/,/g, ""))
+      closingBalance = parseFloat(amountMatches[1][1].replace(/,/g, ""))
+    } else {
       // 1 amount
-      const amt = parseFloat(amountMatches[0][1].replace(/,/g, ""))
-      if (
-        isExplicitCr ||
-        /\b(salary|credited|refund|interest|reversal|cashback|dividend|deposit)\b/i.test(line)
-      ) {
-        creditRupees = amt
-      } else {
-        debitRupees = amt
-      }
+      txnAmount = parseFloat(amountMatches[0][1].replace(/,/g, ""))
     }
 
-    if (debitRupees === 0 && creditRupees === 0) continue
+    if (txnAmount <= 0) continue
 
-    // Clean description: strip amounts, reference keywords, and extra whitespace
+    // Clean description: strip amounts and extra whitespace
     let desc = rest
     for (const m of amountMatches) {
       desc = desc.replace(m[0], " ")
@@ -184,16 +216,86 @@ async function extractTransactionsFromTextRules(text: string): Promise<RawRow[]>
       .replace(/^[-/.,;:|\s]+|[-/.,;:|\s]+$/g, "")
       .trim()
 
-    candidateRows.push({
+    candidates.push({
+      rawDate,
       date: normalizeDateStr(rawDate),
       description: desc || "Bank Transaction",
-      debitPaise: Math.round(debitRupees * 100),
-      creditPaise: Math.round(creditRupees * 100),
+      txnAmount,
+      closingBalance,
+      explicitType,
       rawLine: line,
     })
   }
 
-  if (candidateRows.length === 0) return []
+  if (candidates.length === 0) return []
+
+  // Determine chronological direction
+  const isChronological =
+    candidates.length < 2 ||
+    candidates[candidates.length - 1].date >= candidates[0].date
+
+  // Pass 2: Reconcile Debit vs Credit using closing balance differences and keywords
+  const candidateRows: Array<{
+    date: string
+    description: string
+    debitPaise: number
+    creditPaise: number
+    rawLine: string
+  }> = []
+
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i]
+    let type = c.explicitType
+
+    // Check balance progression with adjacent row
+    if (c.closingBalance !== null) {
+      if (isChronological && i > 0 && candidates[i - 1].closingBalance !== null) {
+        const prevBal = candidates[i - 1].closingBalance!
+        const diff = c.closingBalance - prevBal
+
+        if (Math.abs(diff - c.txnAmount) < 0.05) {
+          type = "credit"
+        } else if (Math.abs(-diff - c.txnAmount) < 0.05) {
+          type = "debit"
+        } else if (!type) {
+          type = diff > 0 ? "credit" : "debit"
+        }
+      } else if (!isChronological && i < candidates.length - 1 && candidates[i + 1].closingBalance !== null) {
+        const prevBal = candidates[i + 1].closingBalance!
+        const diff = c.closingBalance - prevBal
+
+        if (Math.abs(diff - c.txnAmount) < 0.05) {
+          type = "credit"
+        } else if (Math.abs(-diff - c.txnAmount) < 0.05) {
+          type = "debit"
+        } else if (!type) {
+          type = diff > 0 ? "credit" : "debit"
+        }
+      }
+    }
+
+    if (!type) {
+      // Keyword fallback
+      if (
+        /\b(salary|credited|credit|refund|interest|reversal|cashback|dividend|bonus|deposit|received\s+from|neft\s*cr|imps\s*cr|upi\s*cr|by\s*transfer)\b/i.test(
+          c.rawLine
+        )
+      ) {
+        type = "credit"
+      } else {
+        type = "debit"
+      }
+    }
+
+    const isCredit = type === "credit"
+    candidateRows.push({
+      date: c.date,
+      description: c.description,
+      debitPaise: isCredit ? 0 : Math.round(c.txnAmount * 100),
+      creditPaise: isCredit ? Math.round(c.txnAmount * 100) : 0,
+      rawLine: c.rawLine,
+    })
+  }
 
   // Assign categories using the master 5-stage categorization pipeline
   const rows: RawRow[] = []

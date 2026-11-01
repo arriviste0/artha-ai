@@ -215,7 +215,7 @@ export async function persistPayeeLearning(params: {
           direction,
         },
         updateDoc,
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: "after" }
       )
     } catch {
       // ignore Mongo errors

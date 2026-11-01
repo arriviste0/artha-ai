@@ -92,7 +92,7 @@ export function useUpdateDrafts() {
       updates,
     }: {
       id: string
-      updates: { draftId: string; status: "accepted" | "rejected"; description?: string; category?: string }[]
+      updates: { draftId: string; status: "accepted" | "rejected"; description?: string; category?: string; type?: "credit" | "debit" }[]
     }) => {
       const res = await fetch(`/api/statements/${id}/review`, {
         method: "PATCH",

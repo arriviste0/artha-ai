@@ -43,7 +43,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       $inc: { txnCount: 1 },
       $set: { [`categoryCounts.${category}`]: 1 },
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: "after" }
   )
 
   let updatedCount = 0

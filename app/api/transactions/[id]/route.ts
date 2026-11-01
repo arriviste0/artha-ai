@@ -146,7 +146,7 @@ export const PATCH = withAuth(async (req: NextRequest, { userId, params }) => {
   const updated = await Transaction.findOneAndUpdate(
     { _id: params?.id, userId },
     { $set: updateData },
-    { new: true }
+    { returnDocument: "after" }
   ).lean()
 
   await AuditLog.create({

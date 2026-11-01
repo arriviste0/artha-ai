@@ -51,7 +51,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
         const updated = await Budget.findOneAndUpdate(
           { _id: action.budgetId, userId },
           { $set: { limitPaise: action.suggestedLimitPaise } },
-          { new: true }
+          { returnDocument: "after" }
         ).lean()
 
         await AuditLog.create({
@@ -160,7 +160,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
         const updated = await Goal.findOneAndUpdate(
           { _id: action.goalId, userId },
           { $set: updateFields },
-          { new: true }
+          { returnDocument: "after" }
         ).lean()
 
         await AuditLog.create({

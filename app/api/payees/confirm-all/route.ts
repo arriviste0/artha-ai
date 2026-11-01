@@ -86,7 +86,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
         $inc: { txnCount: item.count },
         $set: { [`categoryCounts.${item.category}`]: item.count },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     )
   })
 
@@ -100,11 +100,19 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     ),
   ])
 
-  // 5. Audit log
+  // 5. Audit log with undo snapshot
+  const snapshot = txns.map((t) => ({
+    transactionId: t._id.toString(),
+    previousCategory: t.category,
+    previousBudgetId: t.budgetId ? t.budgetId.toString() : null,
+  }))
+
   const log = await AuditLog.create({
     userId,
     entity: "PayeeProfile",
+    entityId: userObjectId,
     action: "bulk_recategorize",
+    before: { snapshot },
     after: { confirmedCount: txns.length, payeesUpdated: payeeMap.size },
   })
 
