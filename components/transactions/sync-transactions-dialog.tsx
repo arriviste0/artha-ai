@@ -63,7 +63,6 @@ interface SyncMailResult {
   skippedCount: number
   unparseableCount: number
   needsReviewCount?: number
-  cardSyncHint?: string
   noEmailsFound: boolean
   transactions?: Array<{
     _id: string
@@ -243,7 +242,6 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
         needsReviewCount: data.needsReviewCount || 0,
-        cardSyncHint: data.cardSyncHint,
         noEmailsFound: false,
         transactions: data.transactions,
       })
@@ -287,7 +285,6 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
         needsReviewCount: data.needsReviewCount || 0,
-        cardSyncHint: data.cardSyncHint,
         noEmailsFound: false,
         transactions: data.transactions,
       })
@@ -761,13 +758,6 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                 </div>
               </div>
 
-              {/* One-time hint if user paid card bill but has 0 card transactions synced */}
-              {syncResult.cardSyncHint && (
-                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-950 dark:text-blue-200 text-xs text-left">
-                  <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">{syncResult.cardSyncHint}</p>
-                </div>
-              )}
 
               {/* Transactions Preview List */}
               {syncResult.transactions && syncResult.transactions.length > 0 && (

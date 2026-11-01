@@ -34,7 +34,10 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   let fromDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   if (body.fromDate) {
     const custom = new Date(body.fromDate)
-    if (!isNaN(custom.getTime())) fromDate = custom
+    if (!isNaN(custom.getTime())) {
+      custom.setUTCHours(0, 0, 0, 0)
+      fromDate = custom
+    }
   } else if (connection.lastSyncedAt) {
     // 7-day safety buffer ensures boundary or delayed bank emails are never missed
     fromDate = new Date(connection.lastSyncedAt.getTime() - 7 * 24 * 60 * 60 * 1000)
@@ -83,12 +86,20 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   }
 
   // 2. Parse emails (Regex first, LLM fallback, strictly ignoring OTPs)
+  // Strictly filter by fromDate: never sync emails or transactions prior to user's selected date
   const parsedCandidates = []
   let unparseableCount = 0
 
   for (const email of emails) {
+    if (email.date && email.date.getTime() < fromDate.getTime()) {
+      continue // Ignore any email before the requested fromDate
+    }
+
     const parsed = await parseTransactionAlert(email.bodyText, "email_sync", email.date)
     if (parsed) {
+      if (parsed.occurredAt && parsed.occurredAt.getTime() < fromDate.getTime()) {
+        continue // Ignore any transaction occurred before requested fromDate
+      }
       parsedCandidates.push(parsed)
     } else {
       unparseableCount++
@@ -183,26 +194,9 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   // 6. Best-effort pair matching for credit card bill payments within 5-day window
   await linkMatchingCardBillPaymentsInDB(userOid, inserted, Transaction)
 
-  // 7. Check if user paid a card bill but has 0 card transactions synced
-  const hasCardBill = inserted.some((t) => t.subtype === "card_bill_payment")
-  let cardSyncHint: string | undefined = undefined
-  if (hasCardBill) {
-    const hasCardTxns = await Transaction.exists({
-      userId: userOid,
-      _id: { $nin: inserted.map((t) => t._id) },
-      $or: [
-        { cardLast4: { $exists: true, $ne: "" } },
-        { description: /credit card|spent on/i },
-      ],
-    })
-    if (!hasCardTxns) {
-      cardSyncHint = "You paid a card bill but no card transactions are synced. Add card alerts to see where the money went."
-    }
-  }
-
   const needsReviewCount = inserted.filter((t) => t.needsReview).length
 
-  // 8. Update lastSyncedAt cursor
+  // 7. Update lastSyncedAt cursor
   connection.lastSyncedAt = new Date()
   await connection.save()
 
@@ -212,7 +206,6 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     skippedCount: duplicateCount,
     unparseableCount,
     needsReviewCount,
-    cardSyncHint,
     transactions: inserted,
   })
 })

@@ -611,7 +611,46 @@ export const CATEGORY_RULES_CONFIG: RuleCategoryConfig[] = [
     ],
     generic: [],
   },
-  // 16. Transfer (both credit & debit)
+  // 16. Salary (credit only)
+  {
+    category: "Salary",
+    creditOnly: true,
+    brands: [
+      "siemens",
+      "tcs",
+      "infosys",
+      "wipro",
+      "cognizant",
+      "accenture",
+      "hcl",
+      "capgemini",
+      "tech mahindra",
+    ],
+    generic: [
+      "salary",
+      "payroll",
+      "stipend",
+      "remuneration",
+      "wages",
+      "bonus",
+      "healthineers",
+    ],
+  },
+  // 17. Freelance Income (credit only)
+  {
+    category: "Freelance Income",
+    creditOnly: true,
+    brands: ["upwork", "fiverr", "toptal", "freelancer", "deel"],
+    generic: ["consulting", "freelance", "client payment", "honorarium"],
+  },
+  // 18. Business Income (credit only)
+  {
+    category: "Business Income",
+    creditOnly: true,
+    brands: ["razorpay settlement", "stripe payout", "paytm settlement", "cashfree settlement"],
+    generic: ["merchant payout", "settlement", "invoice payment", "sales proceeds"],
+  },
+  // 19. Transfer (both credit & debit)
   {
     category: "Transfer",
     brands: [],
@@ -623,12 +662,9 @@ export const CATEGORY_RULES_CONFIG: RuleCategoryConfig[] = [
       "paytm wallet",
       "atm",
       "cash withdrawal",
-      "neft",
-      "imps",
-      "rtgs",
     ],
   },
-  // 17. Other (fallback)
+  // 20. Other (fallback)
   {
     category: "Other",
     brands: [],

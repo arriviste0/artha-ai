@@ -50,17 +50,11 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
   if (search) aggFilter.description = filter.description
 
   await connectDB()
-  const statsFilter = { ...aggFilter }
-  if (!category) {
-    statsFilter.subtype = { $ne: "card_bill_payment" }
-    statsFilter.category = { $ne: "Transfer" }
-  }
-
   const [transactions, total, statsAgg] = await Promise.all([
     Transaction.find(filter).sort({ occurredAt: -1 }).skip(skip).limit(limit).lean(),
     Transaction.countDocuments(filter),
     Transaction.aggregate([
-      { $match: statsFilter },
+      { $match: aggFilter },
       {
         $group: {
           _id: "$type",

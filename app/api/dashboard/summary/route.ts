@@ -107,14 +107,12 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
 
     Investment.find({ userId }).select("investedPaise currentValuePaise name instrument").lean(),
 
-    // Current period income & expenses (excludes card bill payments and internal transfers to avoid double-counting)
+    // Current period income & expenses
     Transaction.aggregate([
       {
         $match: {
           userId: userOid,
           occurredAt: { $gte: startDate, $lte: endDate },
-          subtype: { $ne: "card_bill_payment" },
-          category: { $ne: "Transfer" },
         },
       },
       { $group: { _id: "$type", total: { $sum: "$amountPaise" } } },
@@ -126,8 +124,6 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
         $match: {
           userId: userOid,
           occurredAt: { $gte: priorStartDate, $lte: priorEndDate },
-          subtype: { $ne: "card_bill_payment" },
-          category: { $ne: "Transfer" },
         },
       },
       { $group: { _id: "$type", total: { $sum: "$amountPaise" } } },
@@ -140,8 +136,6 @@ export const GET = withAuth(async (req: NextRequest, { userId }) => {
           userId: userOid,
           type: "debit",
           occurredAt: { $gte: startDate, $lte: endDate },
-          subtype: { $ne: "card_bill_payment" },
-          category: { $ne: "Transfer" },
         },
       },
       { $group: { _id: "$category", total: { $sum: "$amountPaise" } } },

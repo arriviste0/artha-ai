@@ -248,23 +248,6 @@ export async function POST(req: NextRequest) {
   // 7. Best-effort pair matching for credit card bill payments within 5-day window
   await linkMatchingCardBillPaymentsInDB(userOid, inserted, Transaction)
 
-  // 8. Check if user paid a card bill but has 0 card transactions synced
-  const hasCardBill = inserted.some((t) => t.subtype === "card_bill_payment")
-  let cardSyncHint: string | undefined = undefined
-  if (hasCardBill) {
-    const hasCardTxns = await Transaction.exists({
-      userId: userOid,
-      _id: { $nin: inserted.map((t) => t._id) },
-      $or: [
-        { cardLast4: { $exists: true, $ne: "" } },
-        { description: /credit card|spent on/i },
-      ],
-    })
-    if (!hasCardTxns) {
-      cardSyncHint = "You paid a card bill but no card transactions are synced. Add card alerts to see where the money went."
-    }
-  }
-
   const needsReviewCount = inserted.filter((t) => t.needsReview).length
 
   return NextResponse.json(
@@ -273,7 +256,6 @@ export async function POST(req: NextRequest) {
       skippedCount: duplicateCount,
       unparseableCount,
       needsReviewCount,
-      cardSyncHint,
       transactions: inserted,
       message: `Successfully synced ${inserted.length} transactions from SMS`,
     },
