@@ -211,7 +211,11 @@ export async function parseTransactionAlert(
     }
   }
 
-  // 2. Fallback to LLM
+  // 2. Fallback to LLM only if the text contains financial transaction indicators
+  if (!/\b(debited|credited|spent|paid|payment|transferred|withdrawn|received|deposit|debit|credit)\b/i.test(text)) {
+    return null
+  }
+
   const llmResult = await parseWithLLM(text)
   if (llmResult) {
     llmResult.source = source

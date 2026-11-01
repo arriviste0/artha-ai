@@ -30,28 +30,51 @@ function parseAmount(str: string): number {
 function parseDate(dateStr?: string, timeStr?: string): Date {
   if (!dateStr) return new Date()
   try {
-    const combined = timeStr ? `${dateStr.trim()} ${timeStr.trim()}` : dateStr.trim()
-    const d = new Date(combined)
-    if (!isNaN(d.getTime())) return d
+    const cleanDate = dateStr.trim().replace(/,/g, "")
 
-    // Parse DD-MMM-YY or DD-MM-YY formats (e.g. 15-OCT-24 or 15-10-24)
-    const dmy = dateStr.match(/^(\d{1,2})[-/](\w{3}|\d{1,2})[-/](\d{2,4})$/i)
+    // Parse DD MMM YYYY or DD-MMM-YYYY or DD MMM, YYYY (e.g. 25 Oct 2026 or 30-OCT-2026)
+    const dmyWord = cleanDate.match(/^(\d{1,2})[\s\-/]([A-Za-z]{3})[\s\-/](\d{2,4})$/i)
+    if (dmyWord) {
+      const day = parseInt(dmyWord[1], 10)
+      const monthStr = dmyWord[2]
+      let year = parseInt(dmyWord[3], 10)
+      if (year < 100) year += 2000
+      const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+      const month = months.indexOf(monthStr.toLowerCase().slice(0, 3))
+      const dateObj = new Date(Date.UTC(year, month >= 0 ? month : 0, day))
+      if (timeStr) {
+        const timeParts = timeStr.trim().split(":")
+        const hours = parseInt(timeParts[0], 10) || 0
+        const mins = parseInt(timeParts[1], 10) || 0
+        const secs = parseInt(timeParts[2], 10) || 0
+        dateObj.setUTCHours(hours, mins, secs)
+      }
+      return dateObj
+    }
+
+    // Parse Indian bank DD-MM-YY or DD/MM/YYYY (e.g. 01-11-26, 31-10-26)
+    // NOTE: Must run BEFORE new Date(cleanDate) because JS Date defaults to MM-DD-YY
+    const dmy = cleanDate.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/i)
     if (dmy) {
       const day = parseInt(dmy[1], 10)
-      const monthStr = dmy[2]
+      const month = parseInt(dmy[2], 10) - 1
       let year = parseInt(dmy[3], 10)
       if (year < 100) year += 2000
-
-      let month = 0
-      if (/^\d+$/.test(monthStr)) {
-        month = parseInt(monthStr, 10) - 1
-      } else {
-        const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
-        month = months.indexOf(monthStr.toLowerCase().slice(0, 3))
-        if (month === -1) month = 0
+      const dateObj = new Date(Date.UTC(year, month, day))
+      if (timeStr) {
+        const timeParts = timeStr.trim().split(":")
+        const hours = parseInt(timeParts[0], 10) || 0
+        const mins = parseInt(timeParts[1], 10) || 0
+        const secs = parseInt(timeParts[2], 10) || 0
+        dateObj.setUTCHours(hours, mins, secs)
       }
-      return new Date(Date.UTC(year, month, day))
+      return dateObj
     }
+
+    // Fallback to JS Date constructor
+    const combined = timeStr ? `${cleanDate} ${timeStr.trim()}` : cleanDate
+    const d = new Date(combined)
+    if (!isNaN(d.getTime())) return d
   } catch {
     // fallback to current date
   }
@@ -111,6 +134,126 @@ export function extractReferenceNumber(text: string): string | undefined {
 }
 
 export const TRANSACTION_PATTERNS: PatternDefinition[] = [
+  // 0a. HDFC Credit Card Debit: "Rs. 8521.00 has been debited from your HDFC Bank Credit Card ending 8377 towards MAKEMYTRIP INDIA PVT L on 25 Oct, 2026 at 00:12:40."
+  {
+    name: "hdfc_credit_card_debited",
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:has been|is)\s+debited from your\s+(?:HDFC Bank\s+)?Credit Card\s+(?:ending\s+|[*xX]*)(\d{4})\s+(?:towards|at|to)\s+([^\n,.]+?)\s+on\s+(\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4}|\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})(?:\s+at\s+(\d{2}:\d{2}(?::\d{2})?))?/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[1]),
+      type: "debit",
+      accountLast4: m[2],
+      merchant: cleanMerchant(m[3]),
+      occurredAt: parseDate(m[4], m[5]),
+      referenceNumber: extractReferenceNumber(m.input),
+      bank: "HDFC Bank",
+    }),
+  },
+
+  // 0b. HDFC Account Update (Credit Alert): "We're writing to inform you that Rs.1000.00 has been successfully credited to your HDFC Bank account ending in 6934. Transaction Details: a. Date: 31-10-26 b. Sender: MANTRA PRAKASHBHAI PATEL (VPA: ******p425@okhdfcbank) c. UPI Reference No.: 132145644339"
+  {
+    name: "hdfc_account_update_credit",
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been successfully credited to your\s+(?:HDFC Bank\s+)?account ending in\s*(\d{4}).*?Date:\s*(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4}).*?Sender:\s*([^(\n\r]+?)(?:\s*\(|$).*?(?:UPI Reference No\.?|Reference No\.?|Ref No\.?|Ref)\s*[:.]?\s*(\w+)/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[1]),
+      type: "credit",
+      accountLast4: m[2],
+      occurredAt: parseDate(m[3]),
+      merchant: cleanMerchant(m[4]),
+      referenceNumber: m[5]?.trim(),
+      bank: "HDFC Bank",
+    }),
+  },
+
+  // 0c. HDFC Deposit Alert (NEFT/RTGS/IMPS): "Amount received: INR 53,661.00 Account: XX6934 Date: 30-OCT-2026 Reference Details: NEFT Cr-DEUT0784BBY-SIEMENS HEALTHINEERS INDIA LLP-Pranshu Patel-DEUTH00630304527 Available Balance: INR 62,263.35"
+  {
+    name: "hdfc_deposit_alert",
+    regex: /Amount received:\s*(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+Account:\s*[*xX]*(\d{4})\s+Date:\s*(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})\s+Reference Details:\s*([^\n]+)/i,
+    extract: (m) => {
+      const refLine = m[4] || ""
+      const beforeBalance = refLine.split(/Available Balance/i)[0].trim()
+      const parts = beforeBalance.split("-").map((p) => p.trim()).filter(Boolean)
+      let merchant = "Deposit / Transfer"
+      let refNo: string | undefined = undefined
+
+      if (parts.length >= 3) {
+        merchant = parts[2]
+      } else if (parts.length > 0) {
+        merchant = parts.join(" ")
+      }
+      if (parts.length >= 4) {
+        refNo = parts[parts.length - 1]
+      }
+
+      return {
+        amountRupees: parseAmount(m[1]),
+        type: "credit",
+        accountLast4: m[2],
+        occurredAt: parseDate(m[3]),
+        merchant: cleanMerchant(merchant),
+        referenceNumber: refNo || extractReferenceNumber(m.input),
+        bank: "HDFC Bank",
+      }
+    },
+  },
+
+  // 0d. Credit Card Bill Payment Received Alert: "Payment of Rs. 12,082.41 received towards your HDFC Bank Credit Card ending 8377 on 30-10-2026."
+  {
+    name: "credit_card_payment_received",
+    regex: /(?:Payment of\s+)?(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:received|successful|processed|credited|made)\s+(?:towards|for)\s+(?:your\s+)?(?:[A-Za-z ]+?\s+)?Credit Card\s+(?:ending\s+|[*xX]*)(\d{4})?(?:.*?on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4}))?/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[1]),
+      type: "credit",
+      accountLast4: m[2],
+      occurredAt: parseDate(m[3]),
+      merchant: "Credit Card Bill Payment",
+      referenceNumber: extractReferenceNumber(m.input),
+      bank: "HDFC Bank",
+    }),
+  },
+
+  // 0e. Account Debit for NetBanking BillPay / CC Payment: "Rs. 12,082.41 is debited from your account ending 6934 towards IB BILLPAY DR-HDFC8E-463202XXXXXX8377 on 30-10-26"
+  {
+    name: "account_billpay_debit",
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:is|has been)\s+debited from your account (?:ending\s+|[*xX]*)(\d{4})\s+(?:towards|for)\s+(IB\s+BILLPAY[^\n.]+|[^\n.]+BILLPAY[^\n.]+|HDFC Bank Credit Card[^\n.]*|[^\n.]+Credit Card Bill[^\n.]*)(?:.*?on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4}))?/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[1]),
+      type: "debit",
+      accountLast4: m[2],
+      merchant: cleanMerchant(m[3]),
+      occurredAt: parseDate(m[4]),
+      referenceNumber: extractReferenceNumber(m.input),
+      bank: "HDFC Bank",
+    }),
+  },
+
+  // 0f. Generic Credit Card Debit: "Your Credit Card XX1234 has been debited for INR 1,500.00 at AMAZON on 25-Oct-26"
+  {
+    name: "generic_credit_card_debited",
+    regex: /(?:Credit Card|Card)\s*[*xX]*(\d{4})\s+(?:has been debited|debited)\s+(?:for|with)?\s+(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+(?:at|on|towards)\s+([^\n,.]+?)\s+on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4})/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[2]),
+      type: "debit",
+      accountLast4: m[1],
+      merchant: cleanMerchant(m[3]),
+      occurredAt: parseDate(m[4]),
+      referenceNumber: extractReferenceNumber(m.input),
+    }),
+  },
+
+  // 0g. HDFC Account Credited Fallback: "Rs.1000.00 has been successfully credited to your HDFC Bank account ending in 6934"
+  {
+    name: "hdfc_account_credited_fallback",
+    regex: /(?:Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)\s+has been successfully credited to your\s+(?:HDFC Bank\s+)?account ending in\s*(\d{4})(?:.*?on\s+(\d{1,2}[-/]\w{3}[-/]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+[A-Za-z]{3},?\s+\d{2,4}))?/i,
+    extract: (m) => ({
+      amountRupees: parseAmount(m[1]),
+      type: "credit",
+      accountLast4: m[2],
+      occurredAt: parseDate(m[3]),
+      merchant: "Deposit / Transfer",
+      referenceNumber: extractReferenceNumber(m.input),
+      bank: "HDFC Bank",
+    }),
+  },
   // 1. HDFC Email: "Rs.25.00 is debited from your account ending 6934 towards VPA ******3569@ybl (RAM MANU SINGH PAN SHOP) on 31-10-26."
   {
     name: "hdfc_debit_vpa_account_ending",

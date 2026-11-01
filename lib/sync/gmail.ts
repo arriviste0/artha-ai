@@ -191,46 +191,59 @@ export interface BankEmailItem {
  */
 export async function fetchBankEmails(
   accessToken: string,
-  fromDate: Date
+  fromDate: Date,
+  maxMessages = 300
 ): Promise<BankEmailItem[]> {
   const query = buildGmailQuery(fromDate, getAllBankEmailSenders())
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`
+  const messageRefs: Array<{ id: string }> = []
+  let pageToken: string | undefined = undefined
 
-  const listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
+  do {
+    const pageParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""
+    const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100${pageParam}`
 
-  if (!listRes.ok) {
-    const errorText = await listRes.text()
-    console.error("Gmail list error:", listRes.status, errorText)
-    if (errorText.includes("SERVICE_DISABLED") || errorText.includes("accessNotConfigured")) {
-      throw new Error("GMAIL_API_DISABLED: Gmail API is not enabled in your Google Cloud Console project.")
-    }
-    if (
-      errorText.includes("insufficientPermissions") ||
-      errorText.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")
-    ) {
-      throw new Error("INSUFFICIENT_SCOPES: Gmail read permission has not been granted. Please connect Gmail.")
-    }
-    if (listRes.status === 401) {
-      throw new Error("UNAUTHORIZED: Gmail session expired. Please reconnect Gmail.")
-    }
-    throw new Error(`Gmail API error (${listRes.status}): ${listRes.statusText || errorText}`)
-  }
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
 
-  const listData = (await listRes.json()) as { messages?: Array<{ id: string }> }
-  const messageRefs = listData.messages || []
+    if (!listRes.ok) {
+      const errorText = await listRes.text()
+      console.error("Gmail list error:", listRes.status, errorText)
+      if (errorText.includes("SERVICE_DISABLED") || errorText.includes("accessNotConfigured")) {
+        throw new Error("GMAIL_API_DISABLED: Gmail API is not enabled in your Google Cloud Console project.")
+      }
+      if (
+        errorText.includes("insufficientPermissions") ||
+        errorText.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")
+      ) {
+        throw new Error("INSUFFICIENT_SCOPES: Gmail read permission has not been granted. Please connect Gmail.")
+      }
+      if (listRes.status === 401) {
+        throw new Error("UNAUTHORIZED: Gmail session expired. Please reconnect Gmail.")
+      }
+      throw new Error(`Gmail API error (${listRes.status}): ${listRes.statusText || errorText}`)
+    }
+
+    const listData = (await listRes.json()) as { messages?: Array<{ id: string }>; nextPageToken?: string }
+    if (listData.messages && listData.messages.length > 0) {
+      messageRefs.push(...listData.messages)
+    }
+    pageToken = listData.nextPageToken
+  } while (pageToken && messageRefs.length < maxMessages)
 
   if (messageRefs.length === 0) {
     return []
   }
 
-  // Fetch details for up to 50 messages in parallel (chunked)
-  const items: BankEmailItem[] = []
-  const CHUNK_SIZE = 10
+  // Deduplicate message IDs if any overlap across pages
+  const uniqueMessageRefs = Array.from(new Map(messageRefs.map((m) => [m.id, m])).values()).slice(0, maxMessages)
 
-  for (let i = 0; i < messageRefs.length; i += CHUNK_SIZE) {
-    const chunk = messageRefs.slice(i, i + CHUNK_SIZE)
+  // Fetch details for up to maxMessages in parallel chunks
+  const items: BankEmailItem[] = []
+  const CHUNK_SIZE = 15
+
+  for (let i = 0; i < uniqueMessageRefs.length; i += CHUNK_SIZE) {
+    const chunk = uniqueMessageRefs.slice(i, i + CHUNK_SIZE)
     const fetched = await Promise.all(
       chunk.map(async (msgRef) => {
         try {

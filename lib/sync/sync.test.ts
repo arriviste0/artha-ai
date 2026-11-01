@@ -228,5 +228,84 @@ Rs.2000.00 is debited from your account ending 6934 towards VPA ***************3
       expect(res?.referenceNumber).toBe("132122110737")
       expect(res?.referenceNumber).not.toBe("HDFC")
     })
+
+    it("should parse HDFC Credit Card debit alert (MakeMyTrip 8521.00)", async () => {
+      const text =
+        "Dear Customer, Greetings from HDFC Bank. We would like to inform you that Rs. 8521.00 has been debited from your HDFC Bank Credit Card ending 8377 towards MAKEMYTRIP INDIA PVT L on 25 Oct, 2026 at 00:12:40. To check your available balance"
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(852100)
+      expect(res?.type).toBe("debit")
+      expect(res?.accountNumberMasked).toBe("XX8377")
+      expect(res?.merchant).toBe("MAKEMYTRIP INDIA PVT L")
+      expect(res?.category).toBe("Transport")
+      expect(res?.bank).toBe("HDFC Bank")
+    })
+
+    it("should parse HDFC Credit Card debit alert (Circle Store 4192.00)", async () => {
+      const text =
+        "Dear Customer, Greetings from HDFC Bank. We would like to inform you that Rs. 4192.00 has been debited from your HDFC Bank Credit Card ending 8377 towards RAZ*Circle Store on 24 Oct, 2026 at 14:51:24."
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(419200)
+      expect(res?.type).toBe("debit")
+      expect(res?.accountNumberMasked).toBe("XX8377")
+      expect(res?.merchant).toBe("RAZ*Circle Store")
+      expect(res?.bank).toBe("HDFC Bank")
+    })
+
+    it("should parse HDFC Deposit Alert (NEFT 53,661.00)", async () => {
+      const text =
+        "Dear Customer, You have received a credit in your HDFC Bank account. Details of the transaction: Amount received: INR 53,661.00 Account: XX6934 Date: 30-OCT-2026 Reference Details: NEFT Cr-DEUT0784BBY-SIEMENS HEALTHINEERS INDIA LLP-Pranshu Patel-DEUTH00630304527 Available Balance: INR 62,263.35"
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(5366100)
+      expect(res?.type).toBe("credit")
+      expect(res?.accountNumberMasked).toBe("XX6934")
+      expect(res?.merchant).toBe("SIEMENS HEALTHINEERS INDIA LLP")
+      expect(res?.referenceNumber).toBe("DEUTH00630304527")
+      expect(res?.bank).toBe("HDFC Bank")
+    })
+
+    it("should parse HDFC Account Update credit alert (1000.00)", async () => {
+      const text =
+        "Dear Customer, Greetings from HDFC Bank! We're writing to inform you that Rs.1000.00 has been successfully credited to your HDFC Bank account ending in 6934. Transaction Details: a. Date: 31-10-26 b. Sender: MANTRA PRAKASHBHAI PATEL (VPA: ******p425@okhdfcbank) c. UPI Reference No.: 132145644339"
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(100000)
+      expect(res?.type).toBe("credit")
+      expect(res?.accountNumberMasked).toBe("XX6934")
+      expect(res?.merchant).toBe("MANTRA PRAKASHBHAI PATEL")
+      expect(res?.referenceNumber).toBe("132145644339")
+      expect(res?.bank).toBe("HDFC Bank")
+    })
+
+    it("should parse Credit Card Bill Payment received alert (12,082.41)", async () => {
+      const text =
+        "Payment of Rs. 12,082.41 received towards your HDFC Bank Credit Card ending 8377 on 30-10-2026. Ref no 1793307216810088."
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(1208241)
+      expect(res?.type).toBe("credit")
+      expect(res?.accountNumberMasked).toBe("XX8377")
+      expect(res?.referenceNumber).toBe("1793307216810088")
+    })
+
+    it("should parse Account BillPay debit alert (12,082.41)", async () => {
+      const text =
+        "Rs. 12,082.41 is debited from your account ending 6934 towards IB BILLPAY DR-HDFC8E-463202XXXXXX8377 on 30-10-26. Ref: 1793307216810088."
+      const res = await parseTransactionAlert(text, "email_sync")
+
+      expect(res).not.toBeNull()
+      expect(res?.amountPaise).toBe(1208241)
+      expect(res?.type).toBe("debit")
+      expect(res?.accountNumberMasked).toBe("XX6934")
+      expect(res?.referenceNumber).toBe("1793307216810088")
+    })
   })
 })

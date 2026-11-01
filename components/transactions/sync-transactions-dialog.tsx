@@ -84,7 +84,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
   // Date selection (default: 90 days ago)
   const defaultDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   const [syncFromDate, setSyncFromDate] = useState<string>(defaultDate)
-  const [datePreset, setDatePreset] = useState<"7d" | "30d" | "90d" | "custom">("90d")
+  const [datePreset, setDatePreset] = useState<"7d" | "30d" | "90d" | "all" | "custom">("90d")
 
   // SMS input state
   const [smsText, setSmsText] = useState("")
@@ -135,7 +135,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
     }
   }, [open, refetchStatus])
 
-  function handlePresetChange(preset: "7d" | "30d" | "90d" | "custom") {
+  function handlePresetChange(preset: "7d" | "30d" | "90d" | "all" | "custom") {
     setDatePreset(preset)
     const now = Date.now()
     if (preset === "7d") {
@@ -144,6 +144,8 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
       setSyncFromDate(new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
     } else if (preset === "90d") {
       setSyncFromDate(new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+    } else if (preset === "all") {
+      setSyncFromDate(new Date(now - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
     }
   }
 
@@ -381,11 +383,11 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                     <Calendar className="h-3.5 w-3.5 text-primary" />
                     Sync Transactions From Date
                   </Label>
-                  <span className="text-[11px] text-muted-foreground">Up to 90 days</span>
+                  <span className="text-[11px] text-muted-foreground">Select range or All Time</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {(["7d", "30d", "90d", "custom"] as const).map((p) => (
+                  {(["7d", "30d", "90d", "all", "custom"] as const).map((p) => (
                     <Button
                       key={p}
                       type="button"
@@ -394,7 +396,15 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                       className="h-7 text-xs px-2.5"
                       onClick={() => handlePresetChange(p)}
                     >
-                      {p === "7d" ? "Last 7 Days" : p === "30d" ? "Last 30 Days" : p === "90d" ? "Last 90 Days" : "Custom"}
+                      {p === "7d"
+                        ? "Last 7 Days"
+                        : p === "30d"
+                        ? "Last 30 Days"
+                        : p === "90d"
+                        ? "Last 90 Days"
+                        : p === "all"
+                        ? "All Time (1 Year)"
+                        : "Custom"}
                     </Button>
                   ))}
                 </div>
