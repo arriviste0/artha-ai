@@ -134,31 +134,44 @@ export function getAllSmsHeaders(): string[] {
   return BANK_CONFIGS.flatMap((b) => b.smsHeaders)
 }
 
+import {
+  BANK_ALERT_TYPES,
+  NON_TRANSACTION_IGNORE_PATTERNS,
+  isIgnoredNonTransaction,
+} from "./card-bill-config"
+
+export { BANK_ALERT_TYPES, NON_TRANSACTION_IGNORE_PATTERNS, isIgnoredNonTransaction }
+
 /**
  * Common bank transaction keywords to catch alert emails from ANY Indian bank.
+ * Driven directly by the editable BANK_ALERT_TYPES configuration (including
+ * credit card bill payments, card spend, UPI, netbanking, etc.).
  */
-export const TRANSACTION_SEARCH_KEYWORDS = [
-  '"debited from"',
-  '"credited to"',
-  '"spent on"',
-  '"is debited"',
-  '"is credited"',
-  '"has been debited"',
-  '"has been credited"',
-  '"account ending"',
-  '"Credit Card ending"',
-  '"Credit Card"',
-  '"Amount received:"',
-  '"New Deposit Alert"',
-  '"payment was made using your Credit Card"',
-  '"BILLPAY"',
-  '"BillPay"',
-  '"card ending"',
-  '"VPA"',
-  '"UPI Ref"',
-  '"InstaAlerts"',
-  '"transaction reference"',
-]
+export const TRANSACTION_SEARCH_KEYWORDS: string[] = Array.from(
+  new Set([
+    ...BANK_ALERT_TYPES.flatMap((t) => t.keywords),
+    '"debited from"',
+    '"credited to"',
+    '"spent on"',
+    '"is debited"',
+    '"is credited"',
+    '"has been debited"',
+    '"has been credited"',
+    '"account ending"',
+    '"Credit Card ending"',
+    '"Credit Card"',
+    '"Amount received:"',
+    '"New Deposit Alert"',
+    '"payment was made using your Credit Card"',
+    '"BILLPAY"',
+    '"BillPay"',
+    '"card ending"',
+    '"VPA"',
+    '"UPI Ref"',
+    '"InstaAlerts"',
+    '"transaction reference"',
+  ])
+)
 
 /**
  * Build Gmail search query string for bank alert emails.
@@ -179,13 +192,13 @@ export function buildGmailQuery(fromDate: Date, senders: string[] = getAllBankEm
 }
 
 /**
- * Strict OTP / Security Code Detector
- * If a message matches ANY of these terms, it MUST BE DROPPED IMMEDIATELY.
+ * Strict Non-Transaction & OTP Detector
+ * Ignores items that clearly are not transactions: OTPs, promos, balance-only messages.
  * Never store or log these messages.
  */
 export const OTP_DETECTION_REGEX =
   /\b(otp|one time password|verification code|secret code|login code|do not share|valid for \d+ (?:min|sec)|authorization code|pin code)\b/i
 
 export function isOtpMessage(text: string): boolean {
-  return OTP_DETECTION_REGEX.test(text)
+  return OTP_DETECTION_REGEX.test(text) || isIgnoredNonTransaction(text)
 }

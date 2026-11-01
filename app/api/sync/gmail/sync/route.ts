@@ -7,6 +7,7 @@ import Transaction from "@/models/transaction"
 import { getValidAccessToken, fetchBankEmails } from "@/lib/sync/gmail"
 import { parseTransactionAlert } from "@/lib/sync/parser"
 import { deduplicateTransactions } from "@/lib/sync/dedupe"
+import { linkMatchingCardBillPaymentsInDB } from "@/lib/sync/card-bill-detector"
 import mongoose from "mongoose"
 
 export const POST = withAuth(async (req: NextRequest, { userId }) => {
@@ -161,12 +162,15 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       description: item.description,
       merchant: item.merchant,
       category: item.category,
+      subtype: item.subtype,
+      cardLast4: item.cardLast4,
       referenceNumber: item.referenceNumber,
       accountNumberMasked: item.accountNumberMasked,
       payeeKey: item.payeeKey,
       payeeType: item.payeeType,
       source: "email_sync",
-      needsReview: false,
+      needsReview: item.needsReview ?? false,
+      rawData: item.rawData,
     })
 
     // Update account balance
@@ -176,7 +180,29 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     inserted.push(txn)
   }
 
-  // 6. Update lastSyncedAt cursor
+  // 6. Best-effort pair matching for credit card bill payments within 5-day window
+  await linkMatchingCardBillPaymentsInDB(userOid, inserted, Transaction)
+
+  // 7. Check if user paid a card bill but has 0 card transactions synced
+  const hasCardBill = inserted.some((t) => t.subtype === "card_bill_payment")
+  let cardSyncHint: string | undefined = undefined
+  if (hasCardBill) {
+    const hasCardTxns = await Transaction.exists({
+      userId: userOid,
+      _id: { $nin: inserted.map((t) => t._id) },
+      $or: [
+        { cardLast4: { $exists: true, $ne: "" } },
+        { description: /credit card|spent on/i },
+      ],
+    })
+    if (!hasCardTxns) {
+      cardSyncHint = "You paid a card bill but no card transactions are synced. Add card alerts to see where the money went."
+    }
+  }
+
+  const needsReviewCount = inserted.filter((t) => t.needsReview).length
+
+  // 8. Update lastSyncedAt cursor
   connection.lastSyncedAt = new Date()
   await connection.save()
 
@@ -185,6 +211,8 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     syncedCount: inserted.length,
     skippedCount: duplicateCount,
     unparseableCount,
+    needsReviewCount,
+    cardSyncHint,
     transactions: inserted,
   })
 })

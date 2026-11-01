@@ -32,6 +32,7 @@ export interface PipelineInput {
   payeeName?: string
   phoneNumber?: string
   occurredAt?: Date
+  payeeKey?: string
   forceSkipGroq?: boolean // useful for pure-rule or pure-history testing
 }
 
@@ -254,12 +255,14 @@ export async function runCategorizationPipeline(
   } = input
 
   // 1. Build payee key and detect payee type
-  const payeeKey = buildPayeeKey({
-    vpa,
-    payeeName: payeeName || merchant,
-    phoneNumber,
-    rawText,
-  })
+  const payeeKey =
+    input.payeeKey ||
+    buildPayeeKey({
+      vpa,
+      payeeName: payeeName || merchant,
+      phoneNumber,
+      rawText,
+    })
 
   const detection: PayeeDetectionResult = detectPayeeType({
     vpa,

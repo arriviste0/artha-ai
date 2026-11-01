@@ -19,6 +19,9 @@ export interface ITransaction extends Document {
   merchant?: string
   category: string
   subcategory?: string
+  subtype?: string
+  cardLast4?: string
+  linkedTransactionId?: mongoose.Types.ObjectId
   tags: string[]
   isRecurring: boolean
   recurringGroupId?: string
@@ -55,6 +58,9 @@ const TransactionSchema = new Schema<ITransaction>(
     merchant: { type: String, trim: true },
     category: { type: String, required: true, default: "Uncategorized" },
     subcategory: { type: String },
+    subtype: { type: String, trim: true, index: true },
+    cardLast4: { type: String, trim: true },
+    linkedTransactionId: { type: Schema.Types.ObjectId, ref: "Transaction" },
     tags: [{ type: String }],
     isRecurring: { type: Boolean, default: false },
     recurringGroupId: { type: String, index: true },

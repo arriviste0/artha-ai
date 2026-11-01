@@ -62,6 +62,8 @@ interface SyncMailResult {
   syncedCount: number
   skippedCount: number
   unparseableCount: number
+  needsReviewCount?: number
+  cardSyncHint?: string
   noEmailsFound: boolean
   transactions?: Array<{
     _id: string
@@ -240,6 +242,8 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         syncedCount: data.syncedCount || 0,
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
+        needsReviewCount: data.needsReviewCount || 0,
+        cardSyncHint: data.cardSyncHint,
         noEmailsFound: false,
         transactions: data.transactions,
       })
@@ -282,6 +286,8 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         syncedCount: data.syncedCount || 0,
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
+        needsReviewCount: data.needsReviewCount || 0,
+        cardSyncHint: data.cardSyncHint,
         noEmailsFound: false,
         transactions: data.transactions,
       })
@@ -736,12 +742,17 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                 <p className="text-lg font-bold">
                   Synced {syncResult.syncedCount} new transactions!
                 </p>
-                <div className="flex items-center justify-center gap-2 text-xs">
+                <div className="flex items-center justify-center flex-wrap gap-2 text-xs">
                   {syncResult.skippedCount > 0 && (
                     <Badge variant="outline" className="text-muted-foreground">
                       {syncResult.skippedCount} duplicates skipped
                     </Badge>
                   )}
+                  {syncResult.needsReviewCount && syncResult.needsReviewCount > 0 ? (
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-500/10 font-medium">
+                      {syncResult.needsReviewCount} items need review
+                    </Badge>
+                  ) : null}
                   {syncResult.unparseableCount > 0 && (
                     <Badge variant="outline" className="text-amber-600 border-amber-300">
                       {syncResult.unparseableCount} unparseable items skipped
@@ -749,6 +760,14 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                   )}
                 </div>
               </div>
+
+              {/* One-time hint if user paid card bill but has 0 card transactions synced */}
+              {syncResult.cardSyncHint && (
+                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-950 dark:text-blue-200 text-xs text-left">
+                  <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">{syncResult.cardSyncHint}</p>
+                </div>
+              )}
 
               {/* Transactions Preview List */}
               {syncResult.transactions && syncResult.transactions.length > 0 && (

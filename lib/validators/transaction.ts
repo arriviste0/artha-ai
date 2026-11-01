@@ -13,6 +13,9 @@ export const createTransactionSchema = z.object({
   goalId: z.string().optional(),
   budgetId: z.string().optional(),
   payeeKey: z.string().optional(),
+  subtype: z.string().optional(),
+  cardLast4: z.string().optional(),
+  linkedTransactionId: z.string().optional(),
   applyToPast: z.boolean().optional(),
 })
 
