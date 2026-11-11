@@ -199,12 +199,15 @@ describe("Credit Card Bill Payment Detector & Parsing System", () => {
     expect(parsedBalance).toBeNull()
   })
 
-  // Test 8: An unreadable narration must not create a guessed transaction.
-  it("Fixture 8: Cryptic/unreadable transaction-like alert is skipped", async () => {
+  // Test 8: Item with an unreadable narration -> lands in 'Needs review', not dropped
+  it("Fixture 8: Cryptic/unreadable transaction-like alert lands in 'Needs review' queue instead of being dropped", async () => {
     const crypticNarration = "SYS_TXN_NODE_88319_CODE_A99 1500.00 01/11/26 REF908123746198"
 
     const parsed = await parseTransactionAlert(crypticNarration, "sms_sync")
-    expect(parsed).toBeNull()
+    expect(parsed).not.toBeNull()
+    expect(parsed?.needsReview).toBe(true)
+    expect(parsed?.rawData?.reason).toBe("needs_review")
+    expect(parsed?.category).toBe("Other")
   })
 
   // Test 9: Indian comma formats and 5 date formats parse correctly

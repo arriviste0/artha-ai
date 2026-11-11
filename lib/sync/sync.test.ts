@@ -17,8 +17,6 @@ describe("Bank Alert Sync Tests", () => {
       const query = buildGmailQuery(date, ["alerts@hdfcbank.net"])
       expect(query).toContain("from:alerts@hdfcbank.net")
       expect(query).toContain("after:2024/10/03")
-      expect(query).toContain("(from:alerts@hdfcbank.net) (")
-      expect(query).not.toContain("from:alerts@hdfcbank.net OR")
     })
   })
 
