@@ -64,6 +64,7 @@ interface SyncMailResult {
   unparseableCount: number
   needsReviewCount?: number
   noEmailsFound: boolean
+  syncedFromLatest?: boolean
   transactions?: Array<{
     _id: string
     merchant?: string
@@ -85,7 +86,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
   // Date selection (default: 90 days ago)
   const defaultDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   const [syncFromDate, setSyncFromDate] = useState<string>(defaultDate)
-  const [datePreset, setDatePreset] = useState<"7d" | "30d" | "90d" | "all" | "custom">("90d")
+  const [datePreset, setDatePreset] = useState<"latest" | "7d" | "30d" | "90d" | "all" | "custom">("90d")
 
   // SMS input state
   const [smsText, setSmsText] = useState("")
@@ -136,10 +137,12 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
     }
   }, [open, refetchStatus])
 
-  function handlePresetChange(preset: "7d" | "30d" | "90d" | "all" | "custom") {
+  function handlePresetChange(preset: "latest" | "7d" | "30d" | "90d" | "all" | "custom") {
     setDatePreset(preset)
     const now = Date.now()
-    if (preset === "7d") {
+    if (preset === "latest") {
+      return
+    } else if (preset === "7d") {
       setSyncFromDate(new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
     } else if (preset === "30d") {
       setSyncFromDate(new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
@@ -180,7 +183,13 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
       const res = await fetch("/api/sync/gmail/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromDate: syncFromDate ? `${syncFromDate}T00:00:00.000Z` : undefined }),
+        body: JSON.stringify({
+          fromDate:
+            datePreset === "latest"
+              ? undefined
+              : (syncFromDate ? `${syncFromDate}T00:00:00.000Z` : undefined),
+          syncFromLatest: datePreset === "latest",
+        }),
       })
 
       const data = (await res.json()) as SyncMailResult & { error?: string; notConnected?: boolean }
@@ -386,11 +395,11 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                     <Calendar className="h-3.5 w-3.5 text-primary" />
                     Sync Transactions From Date
                   </Label>
-                  <span className="text-[11px] text-muted-foreground">Select range or All Time</span>
+                  <span className="text-[11px] text-muted-foreground">Choose a range or continue from the latest</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {(["7d", "30d", "90d", "all", "custom"] as const).map((p) => (
+                  {(["latest", "7d", "30d", "90d", "all", "custom"] as const).map((p) => (
                     <Button
                       key={p}
                       type="button"
@@ -399,7 +408,9 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                       className="h-7 text-xs px-2.5"
                       onClick={() => handlePresetChange(p)}
                     >
-                      {p === "7d"
+                      {p === "latest"
+                        ? "Since Latest"
+                        : p === "7d"
                         ? "Last 7 Days"
                         : p === "30d"
                         ? "Last 30 Days"
@@ -411,6 +422,12 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                     </Button>
                   ))}
                 </div>
+
+                {datePreset === "latest" && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Imports transactions after the newest one already recorded on the site, up to today.
+                  </p>
+                )}
 
                 {datePreset === "custom" && (
                   <Input
@@ -622,7 +639,9 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
               <div className="space-y-1">
                 <p className="font-semibold text-base">Scanning Bank Alert Emails...</p>
                 <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                  Searching for HDFC and Indian bank alerts from {new Date(syncFromDate).toLocaleDateString("en-IN")}. Extracting amounts, merchants and deduping.
+                  {datePreset === "latest"
+                    ? "Searching for HDFC and Indian bank alerts after your latest recorded transaction through today. Extracting amounts, merchants and deduping."
+                    : `Searching for HDFC and Indian bank alerts from ${new Date(syncFromDate).toLocaleDateString("en-IN")}. Extracting amounts, merchants and deduping.`}
                 </p>
               </div>
             </div>

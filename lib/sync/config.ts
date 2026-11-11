@@ -192,6 +192,40 @@ export function buildGmailQuery(fromDate: Date, senders: string[] = getAllBankEm
 }
 
 /**
+ * Search only broker and investment-platform mail. The parser still requires
+ * concrete purchase details before creating a holding.
+ */
+export function buildInvestmentGmailQuery(fromDate: Date): string {
+  const providers = [
+    "groww.in",
+    "zerodha.com",
+    "kite.zerodha.com",
+    "upstox.com",
+    "angelone.in",
+    "angelbroking.com",
+    "paytmmoney.com",
+    "kuvera.in",
+    "indmoney.com",
+  ]
+  const providerQuery = providers.map((provider) => `from:${provider}`).join(" OR ")
+  const keywords = [
+    '"contract note"',
+    '"order executed"',
+    '"order confirmation"',
+    '"trade confirmation"',
+    '"SIP successful"',
+    '"units allotted"',
+    '"mutual fund purchase"',
+  ].join(" OR ")
+  const bufferedDate = new Date(fromDate.getTime() - 2 * 24 * 60 * 60 * 1000)
+  const year = bufferedDate.getFullYear()
+  const month = String(bufferedDate.getMonth() + 1).padStart(2, "0")
+  const day = String(bufferedDate.getDate()).padStart(2, "0")
+
+  return `(${providerQuery}) (${keywords}) after:${year}/${month}/${day}`
+}
+
+/**
  * Strict Non-Transaction & OTP Detector
  * Ignores items that clearly are not transactions: OTPs, promos, balance-only messages.
  * Never store or log these messages.

@@ -29,6 +29,7 @@ export interface IInvestment extends Document {
   purchaseDate: Date
   maturityDate?: Date
   notes?: string
+  syncEmailIds?: string[]
   createdAt: Date
   updatedAt: Date
 }
@@ -71,6 +72,7 @@ const InvestmentSchema = new Schema<IInvestment>(
     purchaseDate: { type: Date, required: true },
     maturityDate: { type: Date },
     notes: { type: String },
+    syncEmailIds: [{ type: String }],
   },
   { timestamps: true }
 )

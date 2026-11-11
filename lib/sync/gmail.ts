@@ -1,4 +1,4 @@
-import { buildGmailQuery, getAllBankEmailSenders } from "./config"
+import { buildGmailQuery, buildInvestmentGmailQuery, getAllBankEmailSenders } from "./config"
 import type { ISyncConnection } from "@/models/sync-connection"
 
 interface GoogleTokenResponse {
@@ -185,16 +185,12 @@ export interface BankEmailItem {
   date: Date
 }
 
-/**
- * Fetch bank transaction alert emails from Gmail for the given date range.
- * Note: Body text is parsed in memory and NEVER stored in the database.
- */
-export async function fetchBankEmails(
+/** Fetch matching Gmail messages. Bodies are parsed in memory and never stored. */
+async function fetchGmailMessages(
   accessToken: string,
-  fromDate: Date,
+  query: string,
   maxMessages = 300
 ): Promise<BankEmailItem[]> {
-  const query = buildGmailQuery(fromDate, getAllBankEmailSenders())
   const messageRefs: Array<{ id: string }> = []
   let pageToken: string | undefined = undefined
 
@@ -310,4 +306,20 @@ export async function fetchBankEmails(
   }
 
   return items
+}
+
+export async function fetchBankEmails(
+  accessToken: string,
+  fromDate: Date,
+  maxMessages = 300
+): Promise<BankEmailItem[]> {
+  return fetchGmailMessages(accessToken, buildGmailQuery(fromDate, getAllBankEmailSenders()), maxMessages)
+}
+
+export async function fetchInvestmentEmails(
+  accessToken: string,
+  fromDate: Date,
+  maxMessages = 300
+): Promise<BankEmailItem[]> {
+  return fetchGmailMessages(accessToken, buildInvestmentGmailQuery(fromDate), maxMessages)
 }

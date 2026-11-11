@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, TrendingUp, TrendingDown, Info } from "lucide-react"
+import { Plus, RefreshCw, TrendingUp, TrendingDown, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { InvestmentForm } from "@/components/investments/investment-form"
 import { InvestmentRow } from "@/components/investments/investment-row"
+import { SyncInvestmentsDialog } from "@/components/investments/sync-investments-dialog"
 import { useInvestments, useCreateInvestment } from "@/hooks/use-investments"
 import { useAccounts } from "@/hooks/use-accounts"
 import { toast } from "sonner"
@@ -32,6 +33,7 @@ type InstrumentFilter = "all" | string
 
 export default function InvestmentsPage() {
   const [addOpen, setAddOpen] = useState(false)
+  const [syncOpen, setSyncOpen] = useState(false)
   const [filter, setFilter] = useState<InstrumentFilter>("all")
 
   const { data: investments = [], isLoading } = useInvestments()
@@ -76,9 +78,14 @@ export default function InvestmentsPage() {
             Track your mutual funds, stocks, FDs, and other instruments
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} disabled={accounts.length === 0}>
-          <Plus className="h-4 w-4 mr-2" /> Add investment
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setSyncOpen(true)} disabled={accounts.length === 0}>
+            <RefreshCw className="h-4 w-4 mr-2" /> Sync investments
+          </Button>
+          <Button onClick={() => setAddOpen(true)} disabled={accounts.length === 0}>
+            <Plus className="h-4 w-4 mr-2" /> Add investment
+          </Button>
+        </div>
       </div>
 
       <Alert>
@@ -222,6 +229,8 @@ export default function InvestmentsPage() {
           <InvestmentForm accounts={accounts} onSubmit={handleCreate} onCancel={() => setAddOpen(false)} />
         </DialogContent>
       </Dialog>
+
+      <SyncInvestmentsDialog open={syncOpen} onOpenChange={setSyncOpen} />
     </div>
   )
 }

@@ -22,17 +22,34 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     }, { status: 400 })
   }
 
-  let body: { fromDate?: string } = {}
+  let body: { fromDate?: string; syncFromLatest?: boolean } = {}
   try {
-    body = (await req.json()) as { fromDate?: string }
+    body = (await req.json()) as { fromDate?: string; syncFromLatest?: boolean }
   } catch {
     // optional body
   }
 
   // Determine sync date range:
-  // User selected date > lastSyncedAt (with 7-day safety buffer) > default 90 days ago
+  // "Since latest" uses the newest recorded transaction as an exclusive boundary.
+  // User selected date > lastSyncedAt (with 7-day safety buffer) > default 90 days ago.
   let fromDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  if (body.fromDate) {
+  let latestTransactionDate: Date | undefined
+
+  if (body.syncFromLatest) {
+    const latestTransaction = await Transaction.findOne({ userId })
+      .sort({ occurredAt: -1 })
+      .select({ occurredAt: 1 })
+      .lean()
+
+    if (latestTransaction?.occurredAt) {
+      latestTransactionDate = new Date(latestTransaction.occurredAt)
+      fromDate = latestTransactionDate
+    } else {
+      return NextResponse.json({
+        error: "No transactions are recorded yet. Choose a date range for your first email sync.",
+      }, { status: 400 })
+    }
+  } else if (body.fromDate) {
     const custom = new Date(body.fromDate)
     if (!isNaN(custom.getTime())) {
       custom.setUTCHours(0, 0, 0, 0)
@@ -81,12 +98,13 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       syncedCount: 0,
       skippedCount: 0,
       unparseableCount: 0,
+      syncedFromLatest: Boolean(latestTransactionDate),
       transactions: [],
     })
   }
 
   // 2. Parse emails (Regex first, LLM fallback, strictly ignoring OTPs)
-  // Strictly filter by fromDate: never sync emails or transactions prior to user's selected date
+  // "Since latest" is exclusive, so its boundary transaction is never re-imported.
   const parsedCandidates = []
   let unparseableCount = 0
 
@@ -97,8 +115,13 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
 
     const parsed = await parseTransactionAlert(email.bodyText, "email_sync", email.date)
     if (parsed) {
-      if (parsed.occurredAt && parsed.occurredAt.getTime() < fromDate.getTime()) {
-        continue // Ignore any transaction occurred before requested fromDate
+      if (parsed.occurredAt) {
+        const isBeforeSelectedDate = parsed.occurredAt.getTime() < fromDate.getTime()
+        const isNotNewerThanLatest =
+          latestTransactionDate && parsed.occurredAt.getTime() <= latestTransactionDate.getTime()
+        if (isBeforeSelectedDate || isNotNewerThanLatest) {
+          continue // Ignore transactions outside the requested range
+        }
       }
       parsedCandidates.push(parsed)
     } else {
@@ -119,6 +142,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       syncedCount: 0,
       skippedCount: duplicateCount,
       unparseableCount,
+      syncedFromLatest: Boolean(latestTransactionDate),
       transactions: [],
     })
   }
@@ -206,6 +230,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     skippedCount: duplicateCount,
     unparseableCount,
     needsReviewCount,
+    syncedFromLatest: Boolean(latestTransactionDate),
     transactions: inserted,
   })
 })
