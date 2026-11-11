@@ -108,7 +108,7 @@ export function SyncInvestmentsDialog({ open, onOpenChange }: Props) {
         ) : (
           <div className="space-y-4 py-2">
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Connected as <span className="font-medium text-foreground">{status.email || "your Gmail account"}</span>. Only completed purchases with an instrument name, units, and value are imported; incomplete emails are skipped for safety.
+              Connected as <span className="font-medium text-foreground">{status?.email || "your Gmail account"}</span>. Only completed purchases with an instrument name, units, and value are imported; incomplete emails are skipped for safety.
             </div>
 
             <div className="space-y-1.5">
