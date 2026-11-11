@@ -62,6 +62,7 @@ interface SyncMailResult {
   syncedCount: number
   skippedCount: number
   unparseableCount: number
+  unmatchedAccountCount?: number
   needsReviewCount?: number
   noEmailsFound: boolean
   syncedFromLatest?: boolean
@@ -250,6 +251,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         syncedCount: data.syncedCount || 0,
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
+        unmatchedAccountCount: data.unmatchedAccountCount || 0,
         needsReviewCount: data.needsReviewCount || 0,
         noEmailsFound: false,
         transactions: data.transactions,
@@ -293,6 +295,7 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
         syncedCount: data.syncedCount || 0,
         skippedCount: data.skippedCount || 0,
         unparseableCount: data.unparseableCount || 0,
+        unmatchedAccountCount: data.unmatchedAccountCount || 0,
         needsReviewCount: data.needsReviewCount || 0,
         noEmailsFound: false,
         transactions: data.transactions,
@@ -761,9 +764,14 @@ export function SyncTransactionsDialog({ open, onOpenChange, onSuccess }: Props)
                 <div className="flex items-center justify-center flex-wrap gap-2 text-xs">
                   {syncResult.skippedCount > 0 && (
                     <Badge variant="outline" className="text-muted-foreground">
-                      {syncResult.skippedCount} duplicates skipped
+                      {syncResult.skippedCount} items skipped
                     </Badge>
                   )}
+                  {syncResult.unmatchedAccountCount && syncResult.unmatchedAccountCount > 0 ? (
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-500/10">
+                      {syncResult.unmatchedAccountCount} could not be matched to an account
+                    </Badge>
+                  ) : null}
                   {syncResult.needsReviewCount && syncResult.needsReviewCount > 0 ? (
                     <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-500/10 font-medium">
                       {syncResult.needsReviewCount} items need review

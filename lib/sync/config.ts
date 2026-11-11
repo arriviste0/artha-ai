@@ -175,7 +175,8 @@ export const TRANSACTION_SEARCH_KEYWORDS: string[] = Array.from(
 
 /**
  * Build Gmail search query string for bank alert emails.
- * Matches known bank senders OR general Indian bank transaction keywords.
+ * Requires both a known bank sender and a transaction keyword. This prevents
+ * unrelated receipts or marketing emails from entering the sync pipeline.
  * Subtracts a 2-day buffer so that timezone variations and boundary hours
  * on the start date are never missed. Deduplication prevents duplicates.
  */
@@ -188,7 +189,7 @@ export function buildGmailQuery(fromDate: Date, senders: string[] = getAllBankEm
   const day = String(bufferedDate.getDate()).padStart(2, "0")
   const afterStr = `after:${year}/${month}/${day}`
 
-  return `(${fromStr} OR (${keywordsStr})) ${afterStr}`
+  return `(${fromStr}) (${keywordsStr}) ${afterStr}`
 }
 
 /**

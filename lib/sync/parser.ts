@@ -195,7 +195,7 @@ Return STRICT JSON only matching this format:
  * 2. Runs generic Credit Card Bill Payment detector.
  * 3. Runs fast regex patterns.
  * 4. Invokes LLM fallback with privacy masking.
- * 5. NEVER SKIP: if transaction-like but unparseable, sends to "Needs review" queue.
+ * 5. Skips unparseable messages so uncertain alerts never affect a balance.
  */
 export async function parseTransactionAlert(
   text: string,
@@ -308,24 +308,7 @@ export async function parseTransactionAlert(
     }
   }
 
-  // 4. PART 1 RULE 1 & 2: NEVER SKIP A TRANSACTION!
-  // If this message reached here and is NOT in the ignore list (OTP/promo/balance),
-  // it is transaction-like but unparseable or cryptic -> route to "Needs review" queue.
-  const extractedTokens = extractStatementTokens(text)
-  const fallbackAmount = extractedTokens.amount && extractedTokens.amount > 0 ? extractedTokens.amount : parseGenericAmount(text)
-  const isCredit = /\b(credited|credit|received|cr)\b/i.test(text)
-  const maskedText = maskSensitiveData(text)
-
-  return {
-    amountPaise: Math.round(fallbackAmount * 100),
-    type: isCredit ? "credit" : "debit",
-    merchant: "Unrecognized Transaction",
-    description: maskedText.slice(0, 150),
-    category: "Other",
-    occurredAt: extractedTokens.date || emailDate || new Date(),
-    referenceNumber: extractedTokens.refNo,
-    source,
-    needsReview: true,
-    rawData: { rawText: maskedText, reason: "needs_review" },
-  }
+  // Do not manufacture a debit/credit from a vague message. Even if it
+  // contains an amount, it may not represent a completed transaction.
+  return null
 }

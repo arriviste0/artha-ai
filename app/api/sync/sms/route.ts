@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
   for (const item of items) {
     const itemDate = item.date ? new Date(item.date) : undefined
     const parsed = await parseTransactionAlert(item.text, "sms_sync", itemDate)
-    if (parsed) {
+    if (parsed && !parsed.needsReview) {
       parsedCandidates.push(parsed)
     } else {
       unparseableCount++
@@ -165,6 +165,7 @@ export async function POST(req: NextRequest) {
 
   // 4. Deduplicate (by ref number or amount + time + merchant)
   const { newTransactions, duplicateCount } = await deduplicateTransactions(userId, parsedCandidates)
+  let unmatchedAccountCount = 0
 
   if (newTransactions.length === 0) {
     return NextResponse.json(
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
         syncedCount: 0,
         skippedCount: duplicateCount,
         unparseableCount,
+        unmatchedAccountCount,
         transactions: [],
         message: "All parsed transactions were already recorded (duplicates skipped)",
       },
@@ -183,39 +185,24 @@ export async function POST(req: NextRequest) {
   const userOid = new mongoose.Types.ObjectId(userId)
   const userAccounts = await Account.find({ userId: userOid, isActive: true })
 
-  async function resolveAccount(accountLast4?: string, bankName?: string): Promise<mongoose.Types.ObjectId> {
+  function resolveAccount(accountLast4?: string): mongoose.Types.ObjectId | undefined {
     if (accountLast4 && userAccounts.length > 0) {
       const matched = userAccounts.find(
         (a) => a.accountNumberMasked && a.accountNumberMasked.endsWith(accountLast4)
       )
       if (matched) return matched._id as mongoose.Types.ObjectId
     }
-
-    if (userAccounts.length > 0) {
-      return userAccounts[0]._id as mongoose.Types.ObjectId
-    }
-
-    const newAcc = await Account.create({
-      userId: userOid,
-      name: `${bankName || "HDFC Bank"} (••${accountLast4 || "0000"})`,
-      type: "savings",
-      institution: bankName || "HDFC Bank",
-      accountNumberMasked: accountLast4 ? `XX${accountLast4}` : undefined,
-      currentBalancePaise: 0,
-      currency: "INR",
-      linkedVia: "manual",
-    })
-    userAccounts.push(newAcc)
-    return newAcc._id as mongoose.Types.ObjectId
+    return undefined
   }
 
   // 6. Save transactions (Store ONLY parsed fields, never full SMS body)
   const inserted = []
   for (const item of newTransactions) {
-    const accountId = await resolveAccount(
-      item.accountNumberMasked?.replace(/\D/g, "").slice(-4),
-      item.bank
-    )
+    const accountId = resolveAccount(item.accountNumberMasked?.replace(/\D/g, "").slice(-4))
+    if (!accountId) {
+      unmatchedAccountCount++
+      continue
+    }
 
     const txn = await Transaction.create({
       userId: userOid,
@@ -253,8 +240,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       syncedCount: inserted.length,
-      skippedCount: duplicateCount,
+      skippedCount: duplicateCount + unmatchedAccountCount,
       unparseableCount,
+      unmatchedAccountCount,
       needsReviewCount,
       transactions: inserted,
       message: `Successfully synced ${inserted.length} transactions from SMS`,

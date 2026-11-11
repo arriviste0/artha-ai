@@ -98,6 +98,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       syncedCount: 0,
       skippedCount: 0,
       unparseableCount: 0,
+      unmatchedAccountCount: 0,
       syncedFromLatest: Boolean(latestTransactionDate),
       transactions: [],
     })
@@ -114,7 +115,7 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     }
 
     const parsed = await parseTransactionAlert(email.bodyText, "email_sync", email.date)
-    if (parsed) {
+    if (parsed && !parsed.needsReview) {
       if (parsed.occurredAt) {
         const isBeforeSelectedDate = parsed.occurredAt.getTime() < fromDate.getTime()
         const isNotNewerThanLatest =
@@ -125,12 +126,15 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
       }
       parsedCandidates.push(parsed)
     } else {
+      // Alerts marked uncertain are deliberately not allowed to affect the
+      // transaction ledger or account balance.
       unparseableCount++
     }
   }
 
   // 3. Deduplicate
   const { newTransactions, duplicateCount } = await deduplicateTransactions(userId, parsedCandidates)
+  let unmatchedAccountCount = 0
 
   if (newTransactions.length === 0) {
     // Update lastSyncedAt
@@ -140,8 +144,9 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
     return NextResponse.json({
       noEmailsFound: false,
       syncedCount: 0,
-      skippedCount: duplicateCount,
+      skippedCount: duplicateCount + unmatchedAccountCount,
       unparseableCount,
+      unmatchedAccountCount,
       syncedFromLatest: Boolean(latestTransactionDate),
       transactions: [],
     })
@@ -151,41 +156,26 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   const userOid = new mongoose.Types.ObjectId(userId)
   const userAccounts = await Account.find({ userId: userOid, isActive: true })
 
-  // Helper to find or create an account for a transaction
-  async function resolveAccount(accountLast4?: string, bankName?: string): Promise<mongoose.Types.ObjectId> {
+  // An alert must identify an existing account. Never assign an ambiguous
+  // transaction to the first account or create a guessed account.
+  function resolveAccount(accountLast4?: string): mongoose.Types.ObjectId | undefined {
     if (accountLast4 && userAccounts.length > 0) {
       const matched = userAccounts.find(
         (a) => a.accountNumberMasked && a.accountNumberMasked.endsWith(accountLast4)
       )
       if (matched) return matched._id as mongoose.Types.ObjectId
     }
-
-    if (userAccounts.length > 0) {
-      return userAccounts[0]._id as mongoose.Types.ObjectId
-    }
-
-    // If user has no account yet, create one automatically
-    const newAcc = await Account.create({
-      userId: userOid,
-      name: `${bankName || "HDFC Bank"} (••${accountLast4 || "0000"})`,
-      type: "savings",
-      institution: bankName || "HDFC Bank",
-      accountNumberMasked: accountLast4 ? `XX${accountLast4}` : undefined,
-      currentBalancePaise: 0,
-      currency: "INR",
-      linkedVia: "manual",
-    })
-    userAccounts.push(newAcc)
-    return newAcc._id as mongoose.Types.ObjectId
+    return undefined
   }
 
   // 5. Store parsed transactions (Store ONLY parsed fields, never full email bodies!)
   const inserted = []
   for (const item of newTransactions) {
-    const accountId = await resolveAccount(
-      item.accountNumberMasked?.replace(/\D/g, "").slice(-4),
-      item.bank
-    )
+    const accountId = resolveAccount(item.accountNumberMasked?.replace(/\D/g, "").slice(-4))
+    if (!accountId) {
+      unmatchedAccountCount++
+      continue
+    }
 
     const txn = await Transaction.create({
       userId: userOid,
@@ -227,8 +217,9 @@ export const POST = withAuth(async (req: NextRequest, { userId }) => {
   return NextResponse.json({
     noEmailsFound: false,
     syncedCount: inserted.length,
-    skippedCount: duplicateCount,
+    skippedCount: duplicateCount + unmatchedAccountCount,
     unparseableCount,
+    unmatchedAccountCount,
     needsReviewCount,
     syncedFromLatest: Boolean(latestTransactionDate),
     transactions: inserted,
