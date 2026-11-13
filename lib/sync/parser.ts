@@ -93,7 +93,7 @@ Extract structured transaction details from the given email snippet or SMS alert
 Rules:
 1. If this message is an OTP, verification code, promotional offer, bill reminder, or NOT a completed debit/credit transaction, return strictly:
 { "isTransaction": false }
-2. If the narration contains a masked card number or words such as billpay, bbps, card payment, or autopay, it is a credit card bill payment. Return category 'Transfer' and subtype 'card_bill_payment', and extract cardLast4 and the issuing bank if present.
+2. Classify a transaction as a credit card bill payment only when it has explicit bill-settlement language (for example billpay, BBPS, CC/credit-card payment, or payment received toward a card) and represents a bank-account debit or card-account credit. A card number or the words "credit card" alone can describe a normal card purchase, which must remain an expense.
 3. If it is a completed financial transaction:
 - amount: number in INR rupees (e.g. 1250.00)
 - type: "debit" or "credit"

@@ -180,6 +180,35 @@ describe("Credit Card Bill Payment Detector & Parsing System", () => {
     expect(result.confidence).toBeLessThan(0.5)
   })
 
+  it("keeps a credit-card purchase as an expense instead of a bill payment", async () => {
+    const purchase =
+      "Rs. 4,192.00 has been debited from your HDFC Bank Credit Card ending 8377 towards RAZ*Circle Store on 24 Oct, 2026 at 14:51:24."
+
+    const detection = detectCardBillPayment(purchase, "debit")
+    expect(detection.isCardBillPayment).toBe(false)
+
+    const parsed = await parseTransactionAlert(purchase, "email_sync")
+    expect(parsed?.type).toBe("debit")
+    expect(parsed?.subtype).toBeUndefined()
+    expect(parsed?.category).not.toBe("Transfer")
+  })
+
+  it("detects an account debit made directly to a credit card as a bill payment", async () => {
+    const billPayment =
+      "Rs. 12,082.41 is debited from your account ending 6934 towards HDFC Bank Credit Card ending 8377 on 30-10-26. Ref: 1793307216810088."
+
+    const detection = detectCardBillPayment(billPayment, "debit")
+    expect(detection.isCardBillPayment).toBe(true)
+    expect(detection.cardLast4).toBe("8377")
+
+    const parsed = await parseTransactionAlert(billPayment, "email_sync")
+    expect(parsed?.category).toBe("Transfer")
+    expect(parsed?.subtype).toBe("card_bill_payment")
+    expect(parsed?.type).toBe("debit")
+    expect(parsed?.cardLast4).toBe("8377")
+    expect(parsed?.accountNumberMasked).toBe("XX6934")
+  })
+
   // Test 7: OTP message and promo message -> ignored, never reach the queue
   it("Fixture 7: OTP messages and promo messages are ignored and return null", async () => {
     const otpMsg = "Your OTP for login is 482910. Do not share this secret code with anyone. Valid for 10 min."

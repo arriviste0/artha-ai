@@ -137,6 +137,24 @@ export function parseGenericReference(text: string, cardToken?: string): string 
   return digitMatches.find((d) => d !== cardToken && d !== cardDigitsOnly)
 }
 
+// A card identifier alone is not evidence of a bill payment: it is present in
+// ordinary card-purchase alerts too. Keep purchase language ahead of the bill
+// detector so those expenses never become transfers.
+const CARD_PURCHASE_PATTERNS = [
+  /\b(?:spent|used|charged|purchased|transaction)\b[\s\S]{0,80}\b(?:credit\s+)?card\b/i,
+  /\b(?:debited|charged)\s+from\s+(?:your\s+)?(?:[A-Za-z]+\s+){0,4}(?:credit\s+)?card\b/i,
+  /\b(?:credit\s+)?card\b[\s\S]{0,40}\b(?:has been|was)?\s*(?:debited|charged)\s+(?:for|with|at)\b/i,
+]
+
+// These describe money settling a card balance, rather than spending on a card.
+// They intentionally require payment/bill wording or an account-to-card direction.
+const CARD_BILL_PAYMENT_PATTERNS = [
+  /\b(?:ib\s*)?bill\s*pay\b|\bbillpay\b|\bbbps\b|\bccpay\b/i,
+  /\b(?:cc|credit\s+card)\s+(?:bill\s+)?payment\b/i,
+  /\b(?:payment|amount)\b[\s\S]{0,100}\b(?:received|credited|successful|processed)\b[\s\S]{0,100}\b(?:credit\s+)?card\b/i,
+  /\b(?:debited|paid|transferred)\b[\s\S]{0,80}\b(?:a\/c|account)\b[\s\S]{0,120}\b(?:towards|to|for)\b[\s\S]{0,100}\b(?:credit\s+)?card\b/i,
+]
+
 /**
  * Generic Credit Card Bill Payment Detector
  *
@@ -160,13 +178,20 @@ export function detectCardBillPayment(
   // A credit card debit is card spend (purchases/expenses), NEVER a card bill payment!
   // Per Part 2: "Direction rule: a card bill payment is a DEBIT on the bank account.
   // The matching 'payment received' entry on the card side is a CREDIT on the card account."
-  if (/\b(debited from your .*?credit card|spent on (?:your )?credit card|using your credit card)\b/i.test(narration)) {
+  if (CARD_PURCHASE_PATTERNS.some((pattern) => pattern.test(narration))) {
     return {
       isCardBillPayment: false,
       confidence: 0,
       signals: [],
       direction: "debit",
     }
+  }
+
+  // Strong settlement language is required when the narration only says
+  // "credit card". This prevents a card purchase from being treated as a bill.
+  if (CARD_BILL_PAYMENT_PATTERNS.some((pattern) => pattern.test(narration))) {
+    signals.push("card_bill_payment_language")
+    confidence += 0.55
   }
 
   // Inferred direction: if narration explicitly indicates credit / payment received on card side
@@ -258,7 +283,7 @@ export function detectCardBillPayment(
 
   confidence = Math.min(1.0, Math.round(confidence * 100) / 100)
 
-  const isCardBillPayment = confidence >= 0.5
+  const isCardBillPayment = confidence >= 0.8
   const suggestedTransfer = confidence >= 0.5 && confidence < 0.8
 
   return {
