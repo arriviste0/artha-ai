@@ -102,6 +102,8 @@ export const NON_TRANSACTION_IGNORE_PATTERNS: RegExp[] = [
   /\b(pre-approved loan|apply now|flat \d+% off|exclusive discount|special festive treat|raffle is back|congrats! you're now all set|double festive discount|save up to rs\.?|sale ends|exclusive invite|gift card on us)\b/i,
   // 3. Digital vouchers, coupons, rewards, and promotional codes
   /\b(?:digital\s+)?(?:coupon|coupon code|voucher|e-?voucher|gift\s*(?:card|voucher)|promo(?:tional)?\s+code|reward(?:\s+points?)?)\b/i,
+  // Digital-rupee benefits are promotional wallet offers, not account credits.
+  /\b(?:digital\s+rupee|e[-\s]?rupee)\s+(?:benefit|reward|offer)\b|\b(?:benefit|reward)\s+is\s+(?:waiting|available)\b/i,
   // 4. Requests, demands, reminders, and mandate setup are not completed payments
   /\b(?:payment|money|upi|collect)\s+(?:request|demand)\b|\b(?:request|demand)\s+(?:for|to)\s+(?:payment|pay|money)\b|\b(?:bill|payment)\s+(?:is\s+)?due\b|\bpayment reminder\b/i,
   /\b(?:e[-\s]?mandate|mandate)\b[\s\S]{0,60}\b(?:request|registration|setup|created|cancel(?:led|ation)|revoked|approve|approval)\b/i,

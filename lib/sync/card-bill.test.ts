@@ -231,6 +231,7 @@ describe("Credit Card Bill Payment Detector & Parsing System", () => {
   it("ignores coupons, payment demands, mandates, and unsettled transaction notices", async () => {
     const nonTransactions = [
       "Your Digital Coupon worth Rs. 500 is ready. Use coupon code SAVE500 before it expires.",
+      "Your ₹250 Digital Rupee benefit is waiting! 🎁 To view this message in HTML, open the app.",
       "You have received a UPI collect request for Rs. 1,250. Approve it to complete the payment.",
       "Your EMI payment demand of Rs. 4,500 is due on 15 November. Pay now to avoid charges.",
       "An e-Mandate request from STREAMING SERVICE is awaiting your approval.",
