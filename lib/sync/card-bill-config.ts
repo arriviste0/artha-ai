@@ -100,7 +100,14 @@ export const NON_TRANSACTION_IGNORE_PATTERNS: RegExp[] = [
   /\b(otp|one time password|verification code|secret code|login code|authorization code|pin code)\b/i,
   // 2. Promotional / marketing offers
   /\b(pre-approved loan|apply now|flat \d+% off|exclusive discount|special festive treat|raffle is back|congrats! you're now all set|double festive discount|save up to rs\.?|sale ends|exclusive invite|gift card on us)\b/i,
-  // 3. Balance inquiry / balance-only messages
+  // 3. Digital vouchers, coupons, rewards, and promotional codes
+  /\b(?:digital\s+)?(?:coupon|coupon code|voucher|e-?voucher|gift\s*(?:card|voucher)|promo(?:tional)?\s+code|reward(?:\s+points?)?)\b/i,
+  // 4. Requests, demands, reminders, and mandate setup are not completed payments
+  /\b(?:payment|money|upi|collect)\s+(?:request|demand)\b|\b(?:request|demand)\s+(?:for|to)\s+(?:payment|pay|money)\b|\b(?:bill|payment)\s+(?:is\s+)?due\b|\bpayment reminder\b/i,
+  /\b(?:e[-\s]?mandate|mandate)\b[\s\S]{0,60}\b(?:request|registration|setup|created|cancel(?:led|ation)|revoked|approve|approval)\b/i,
+  // 5. Failed, reversed, and pending alerts do not represent settled transactions
+  /\b(?:transaction|payment|transfer|upi|mandate)\b[\s\S]{0,60}\b(?:failed|declined|rejected|reversed|cancelled|canceled|pending|being processed)\b/i,
+  // 6. Balance inquiry / balance-only messages
   /\b(available balance is|clear balance is|balance in your a\/c.*is rs\.?|your a\/c balance is)\b/i,
 ]
 

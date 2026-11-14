@@ -228,6 +228,46 @@ describe("Credit Card Bill Payment Detector & Parsing System", () => {
     expect(parsedBalance).toBeNull()
   })
 
+  it("ignores coupons, payment demands, mandates, and unsettled transaction notices", async () => {
+    const nonTransactions = [
+      "Your Digital Coupon worth Rs. 500 is ready. Use coupon code SAVE500 before it expires.",
+      "You have received a UPI collect request for Rs. 1,250. Approve it to complete the payment.",
+      "Your EMI payment demand of Rs. 4,500 is due on 15 November. Pay now to avoid charges.",
+      "An e-Mandate request from STREAMING SERVICE is awaiting your approval.",
+      "Your UPI transaction of Rs. 850 is pending and will be updated shortly.",
+      "Your card transaction of Rs. 1,200 was declined.",
+    ]
+
+    for (const text of nonTransactions) {
+      expect(isIgnoredNonTransaction(text)).toBe(true)
+      await expect(parseTransactionAlert(text, "sms_sync")).resolves.toBeNull()
+    }
+  })
+
+  it("keeps malformed but evidenced transaction alerts in review", async () => {
+    const text = "SYS_TXN_NODE_88319_CODE_A99 1500.00 01/11/26 REF908123746198"
+
+    expect(isIgnoredNonTransaction(text)).toBe(false)
+    const parsed = await parseTransactionAlert(text, "sms_sync")
+    expect(parsed?.needsReview).toBe(true)
+    expect(parsed?.amountPaise).toBe(150000)
+  })
+
+  it("keeps completed auto-pay charges while ignoring auto-pay setup notices", async () => {
+    const completedAutoPay =
+      "Your AutoPay of Rs. 799.00 for NETFLIX was successfully processed from account ending 6934 on 14-11-26. Ref: 123456789012."
+    const setupNotice =
+      "An e-Mandate request for NETFLIX AutoPay is awaiting your approval. No amount has been debited."
+
+    expect(isIgnoredNonTransaction(completedAutoPay)).toBe(false)
+    const parsed = await parseTransactionAlert(completedAutoPay, "email_sync")
+    expect(parsed?.type).toBe("debit")
+    expect(parsed?.amountPaise).toBe(79900)
+
+    expect(isIgnoredNonTransaction(setupNotice)).toBe(true)
+    await expect(parseTransactionAlert(setupNotice, "email_sync")).resolves.toBeNull()
+  })
+
   // Test 8: Item with an unreadable narration -> lands in 'Needs review', not dropped
   it("Fixture 8: Cryptic/unreadable transaction-like alert lands in 'Needs review' queue instead of being dropped", async () => {
     const crypticNarration = "SYS_TXN_NODE_88319_CODE_A99 1500.00 01/11/26 REF908123746198"

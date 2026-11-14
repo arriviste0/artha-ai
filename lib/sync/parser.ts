@@ -66,6 +66,39 @@ function maskAccountNumber(last4?: string): string | undefined {
   return `XX${cleaned}`
 }
 
+/**
+ * The review queue is useful for malformed real alerts, but it must not turn
+ * every unrecognized bank email into a transaction. Keep an intentionally
+ * narrow escape hatch for a transaction ID plus amount/reference, which is a
+ * common format for otherwise unparseable SMS messages.
+ */
+function hasFallbackTransactionEvidence(text: string, amount: number): boolean {
+  // An alert without a monetary amount cannot become a financial record.
+  if (amount <= 0) return false
+
+  if (/\b(?:debited|credited|spent|withdrawn|transferred|deposited|deposit)\b/i.test(text)) {
+    return true
+  }
+
+  if (/\b(?:payment|transfer)\b[\s\S]{0,50}\b(?:received|successful|processed|completed)\b/i.test(text)) {
+    return true
+  }
+
+  // A completed AutoPay/NACH/mandate charge is a real debit even when the
+  // bank's wording is too unusual for the structured patterns above.
+  if (
+    /\b(?:auto\s*pay|nach|e[-\s]?mandate)\b/i.test(text) &&
+    /\b(?:successful(?:ly)?|processed|completed|executed|paid|debited)\b/i.test(text)
+  ) {
+    return true
+  }
+
+  return (
+    /(?:^|[^A-Za-z0-9])(?:txn|transaction)(?=$|[^A-Za-z0-9])/i.test(text) &&
+    /(?:^|[^A-Za-z0-9])(?:ref(?:erence)?|utr)[\s:#-]?[A-Za-z0-9]+/i.test(text)
+  )
+}
+
 const llmResponseSchema = z.object({
   isTransaction: z.boolean(),
   amount: z.number().positive().optional(),
@@ -195,7 +228,7 @@ Return STRICT JSON only matching this format:
  * 2. Runs generic Credit Card Bill Payment detector.
  * 3. Runs fast regex patterns.
  * 4. Invokes LLM fallback with privacy masking.
- * 5. NEVER SKIP: if transaction-like but unparseable, sends to "Needs review" queue.
+ * 5. Routes only evidenced but unparseable transactions to "Needs review".
  */
 export async function parseTransactionAlert(
   text: string,
@@ -294,7 +327,7 @@ export async function parseTransactionAlert(
 
   // 3. Fallback to LLM if financial indicators are present
   if (
-    /\b(debited|credited|spent|paid|payment|transferred|withdrawn|received|deposit|debit|credit|billpay|bbps|autopay)\b/i.test(
+    /\b(debited|credited|spent|paid|payment|transferred|withdrawn|received|deposit|debit|credit|billpay|bbps|auto\s*pay|nach|e[-\s]?mandate)\b/i.test(
       text
     )
   ) {
@@ -308,11 +341,15 @@ export async function parseTransactionAlert(
     }
   }
 
-  // 4. PART 1 RULE 1 & 2: NEVER SKIP A TRANSACTION!
-  // If this message reached here and is NOT in the ignore list (OTP/promo/balance),
-  // it is transaction-like but unparseable or cryptic -> route to "Needs review" queue.
+  // 4. Route only evidenced but unparseable transactions to "Needs review".
+  // This prevents newsletters and account notices that slipped through Gmail search
+  // from becoming zero-value or false transactions.
   const extractedTokens = extractStatementTokens(text)
   const fallbackAmount = extractedTokens.amount && extractedTokens.amount > 0 ? extractedTokens.amount : parseGenericAmount(text)
+  if (!hasFallbackTransactionEvidence(text, fallbackAmount)) {
+    return null
+  }
+
   const isCredit = /\b(credited|credit|received|cr)\b/i.test(text)
   const maskedText = maskSensitiveData(text)
 
